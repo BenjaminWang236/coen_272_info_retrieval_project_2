@@ -6,9 +6,16 @@ from dataclasses import dataclass
 import attr
 
 
-def userWeight(user):
+def userWeightCosineSimilarity(user):
     """
-    Calculate the user weight based on the number of ratings
+    Calculate the user weight as user similarity using Cosine Similarity (range: 0 to 1)
+    """
+    return 1 / (1 + math.log(user.size))
+
+
+def userWeightPearsonCorrelation(user):
+    """
+    Calculate the user weight as user similarity using Pearson Correlation (range: -1 to 1)
     """
     return 1 / (1 + math.log(user.size))
 
@@ -22,7 +29,7 @@ def main():
     0.  Import data from the .txt files in the same directory as this script.
     """
     datasets = dict()
-    testSizes = list()
+    testSizes = dict()
     os.chdir(
         os.path.dirname(os.path.abspath(__file__))
     )  # Change directory to the directory of this file
@@ -31,9 +38,11 @@ def main():
         datasets[fileName] = np.loadtxt(file, dtype=int)
         print(f"{fileName} shape:\t{datasets[fileName].shape}")
         if fileName[: len("test")] == "test" and fileName[len("test") :].isdigit():
-            testSizes.append(int(fileName[len("test") :]))
+            testSizes[fileName] = int(fileName[len("test") :])
     print(f"Test Sizes:\t{testSizes}")
     pp.pprint(datasets)
+
+    # For each test files, generate a matrix with only the empty ratings
 
     """
     1.  User-Based Collaborative Filtering Algorithms
