@@ -1,5 +1,8 @@
 MY PIN: 2129090456418914
+Submissions so far: 2
+
 Cosine Similarity:
-    test5:
-    test10:
-    test20:
+    test5:      0.840065024384144
+    test10:     0.7925
+    test20:     0.773512105720073
+    OVERALL:    0.800032835330816
