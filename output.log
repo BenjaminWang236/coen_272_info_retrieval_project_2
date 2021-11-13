@@ -34,6 +34,8 @@ array([[3.01000000e+02, 0.00000000e+00, 7.26396400e-01],
        [4.00000000e+02, 1.99000000e+02, 4.94166211e-01]])
 userWeights shape:	(20000, 3)
 offset: 301.0
+max predicted: 5 min predicted: 1
+max item_index: 1000 min item_index: 1
 test20:
 Lowest Weight: 0.04926646390821466, Highest Weight: 0.9114138317912648
 array([[4.01000000e+02, 0.00000000e+00, 6.73727821e-01],
@@ -45,6 +47,8 @@ array([[4.01000000e+02, 0.00000000e+00, 6.73727821e-01],
        [5.00000000e+02, 1.99000000e+02, 4.53370834e-01]])
 userWeights shape:	(20000, 3)
 offset: 401.0
+max predicted: 5 min predicted: 1
+max item_index: 1000 min item_index: 1
 test5:
 Lowest Weight: 0.10976425998969035, Highest Weight: 0.9869275424396532
 array([[201.       ,   0.       ,   0.4      ],
@@ -56,3 +60,5 @@ array([[201.       ,   0.       ,   0.4      ],
        [300.       , 199.       ,   0.4417261]])
 userWeights shape:	(20000, 3)
 offset: 201.0
+max predicted: 5 min predicted: 1
+max item_index: 1000 min item_index: 1

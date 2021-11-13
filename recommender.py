@@ -341,13 +341,15 @@ def makePredictions(
         # print(sum_neighbor_weights)
         # print(nominator)
         if sum_neighbor_weights == 0:
-            prediction = 0
+            prediction = 3
         else:
             prediction = nominator / sum_neighbor_weights
             if prediction > maxRating:
                 prediction = maxRating
             if prediction < minRating:
                 prediction = minRating
+            if int(prediction) == noRating:
+                prediction = 3
 
         row[rating] = prediction
 
@@ -431,6 +433,12 @@ def main():
         # print(testPredictions[test])
         # for row in testPredictions[test]:
         #     print(row)
+        print(
+            f"max predicted: {max(testPredictions[test][:,rating])} min predicted: {min(testPredictions[test][:,rating])}"
+        )
+        print(
+            f"max item_index: {max(testPredictions[test][:,itemID])} min item_index: {min(testPredictions[test][:,itemID])}"
+        )
 
         # Write out the predictions to the output file
         np.savetxt(
