@@ -12,28 +12,31 @@ unknownNumPred = -1
 rec_indices = {
     "user_id": 0,
     "num_known": 1,
-    "known_ratings": 2,
-    "average_rating": 3,
-    "num_predict": 4,
-    "predict_ratings": 5,
-    "prediction_done": 6,
-    "num_neighbors": 7,
-    "neighbor_ids": 8,
-    "neighbor_weights": 9,
+    "known_indices": 2,
+    "known_ratings": 3,
+    "average_rating": 4,
+    "num_predict": 5,
+    "predict_indices": 6,
+    "predict_ratings": 7,
+    "prediction_done": 8,
+    "num_neighbors": 9,
+    "neighbor_ids": 10,
+    "neighbor_weights": 11,
 }
 
 """
 Define a Custom Class for Recommender System / User-based Collaborative Filtering:
 Recommender_type (np.dtype):
     - UserID  (1-based when explicitely stored, ie. 1-200, 201-300)
-    - List of Known Ratings (1-5)
     - Number of Known Ratings
+    - List of Known Rating Indices (Compressed Notation, only store indices of known ratings)
+    - List of Known Ratings (1-5) (Compressed Notation, only store ratings of known ratings)
     - List of Predictions. Initialize to Empty Ratings (Empty Ratings == 0)
     - Number of Predictions Needed
     - PredictionDone (Boolean). Initialize to False
     - Number of Neighbors
-    - List of Neighbors (UserIDs)
-    - List of Neighboring Weights (Cosine Similarity, Pearson Correlation) to other users (200 training users only)
+    - List of Neighbors (UserIDs)   (Compressed Notation, only store indices of neighbors)
+    - List of Neighboring Weights (Cosine Similarity, Pearson Correlation) to other users (200 training users only) (Spare Notation, access weights by index)
 Accessible as:
     - user_id: "user_id"
     - num_known: "num_known"
@@ -44,13 +47,15 @@ recommender_type = np.dtype(
     [
         ("user_id", np.uint16),  # 1-based
         ("num_known", np.uint16),
+        ("known_indices", np.uint16, (1000, 1)),  # 1-based
         (
             "known_ratings",
             np.float32,
             (1000, 1),
         ),  # Pearson Ratings are Floats [-1, 1] # Index (0-based) of ratings + 1 = Item-ID as given (1-based)
-        ("average_rating", np.uint8),  # Average of Known Ratings
+        ("average_rating", np.float64),  # Average of Known Ratings
         ("num_predict", np.int16),  # -1 for unknown
+        ("predict_indices", np.uint16, (1000, 1)),  # 1-based
         (
             "predict_ratings",
             np.float32,
@@ -180,9 +185,120 @@ def recommender_load(
 
         # Load dataset from file:
         with open(file, "r") as f:
-            fileContents = f.read().strip().splitlines()
-            # print(fileContents)  # DEBUG   # Works
-            user_indices, item_indices, ratings = [], [], []
+            if fileName.startswith("train"):
+                ...
+            else:  # elif fileName.startswith("test"):
+                fileContents = f.read().strip().splitlines()
+                # print(fileContents)  # DEBUG   # Works
+                # print(f"file '{file}' num lines: {len(fileContents)}")  # DEBUG   # Works
+                user_indices, item_indices, ratings = [], [], []
+                for line in fileContents:
+                    [a, b, c] = [int(word) for word in line.split() if word.isdigit()]
+                    user_indices.append(a)
+                    item_indices.append(b)
+                    ratings.append(c)
+                # print(f"file '{file}' user_indices: {user_indices}")    # DEBUG   # Works
+                # num_known = dataset[0]["num_known"]
+
+                # Go through each user, insert known_ratings, count num_predict, and insert predict_ratings
+                # Compare current dataset_index with previous dataset_index to see if user_id has changed
+                prev_index = -1
+                # If user_id has changed, restart the internal known/prediction counters
+                known_counter, predict_counter = 0, 0
+                for line_id, line in enumerate(fileContents):
+                    # Find index of user in dataset:
+                    dataset_index = np.where(
+                        dataset[:]["user_id"] == user_indices[line_id]
+                    )[0][0]
+                    # print(f"line: {line_id} dataset_index: {dataset_index}")    # DEBUG   # Works
+
+                    if dataset_index != prev_index and line_id != 0:
+                        # Insert num_predict and check if num_known is correct
+                        dataset[prev_index]["num_predict"] = predict_counter
+                        if known_counter != dataset[prev_index]["num_known"]:
+                            print(
+                                f"Error: known_counter {known_counter} in file '{file}' line {line_id} does not match num_known in dataset {dataset[prev_index]['num_known']}. Quitting."
+                            )
+                            quit()
+                        # Insert the average of known ratings into the dataset's average_rating field:
+                        dataset[prev_index]["average_rating"] = np.mean(
+                            dataset[prev_index][0]["known_ratings"][:known_counter]
+                        ).astype(np.float64)
+                        if int(np.round(dataset[prev_index]["average_rating"])) == 0:
+                            print(f"ERROR: Average of 0 means no known_rating")
+                        # Reset counters
+                        known_counter = 0
+                        predict_counter = 0
+                    prev_index = dataset_index
+
+                    # Insert: known_ratings, num_predict, predict_ratings
+                    # known ratings and predict_ratings need an internal counter to keep track of the number of known/predict ratings
+                    # At end insert internal counter of num_predit_ratings into num_predict
+                    # known_indices, predict_indices = [], []
+                    if ratings[line_id] != 0 and ratings[line_id] in range(1, 6, 1):
+                        # print(
+                        #     f"file '{file}' line: {line_id} dataset_index: {dataset_index} known_counter: {known_counter}"
+                        # )  # DEBUG  # Works
+                        # print(
+                        #     f"Checking known_indices array:\n{dataset[dataset_index][0]['known_indices'][known_counter]}"
+                        # )  # DEBUG  # Works
+                        # Out of Bound error was because the indices/ratings are 2D arrays of size (1000, 1), so need to access row 0 first with [0]
+                        dataset[dataset_index][0]["known_indices"][
+                            known_counter
+                        ] = item_indices[line_id]
+                        dataset[dataset_index][0]["known_ratings"][
+                            known_counter
+                        ] = ratings[line_id]
+                        known_counter += 1
+                    elif ratings[line_id] == 0:
+                        # print(
+                        #     f"file '{file}' line: {line_id} dataset_index: {dataset_index} predict_counter: {predict_counter}"
+                        # )  # DEBUG  # Works
+                        # print(
+                        #     f"Checking predict_indices array:\n{dataset[dataset_index][0]['predict_indices'][predict_counter]}"
+                        # )  # DEBUG  # Works
+                        # Out of Bound error was because the indices/ratings are 2D arrays of size (1000, 1), so need to access row 0 first with [0]
+                        dataset[dataset_index][0]["predict_indices"][
+                            predict_counter
+                        ] = item_indices[line_id]
+                        dataset[dataset_index][0]["predict_ratings"][
+                            predict_counter
+                        ] = ratings[line_id]
+                        predict_counter += 1
+                    else:
+                        print(
+                            f"Error: file '{file}' line_index: {line_id} rating: {ratings[line_id]} is neither 0 nor within [1-5]. Invalid Rating. Quitting."
+                        )
+                        quit()
+
+                    # Last iteration only:
+                    if (line_id + 1) == len(fileContents):
+                        # Insert num_predict and check if num_known is correct
+                        dataset[prev_index]["num_predict"] = predict_counter
+                        if known_counter != dataset[prev_index]["num_known"]:
+                            print(
+                                f"Error: known_counter {known_counter} in file '{file}' line {line_id} does not match num_known in dataset {dataset[prev_index]['num_known']}. Quitting."
+                            )
+                            quit()
+                        # Insert the average of known ratings into the dataset's average_rating field:
+                        dataset[prev_index]["average_rating"] = np.mean(
+                            dataset[prev_index][0]["known_ratings"][:known_counter]
+                        ).astype(np.float64)
+                        if int(np.round(dataset[prev_index]["average_rating"])) == 0:
+                            print(f"ERROR: Average of 0 means no known_rating")
+
+                # Check if num_known + num_predict adds up to the number of line entries in file:
+                if sum(dataset[:]["num_known"]) + sum(dataset[:]["num_predict"]) != len(
+                    fileContents
+                ):
+                    print(
+                        f"Error: num_known + num_predict in file '{file}' does not equal number of lines in file. Quitting."
+                    )
+                    quit()
+                else:
+                    print(
+                        f"file '{file}' total num_known: {sum(dataset[:]['num_known'])} + total num_predict: {sum(dataset[:]['num_predict'])} = {sum(dataset[:]['num_known']) + sum(dataset[:]['num_predict'])} == number of lines in file: {len(fileContents)}"
+                    )
 
         datasets.append(dataset)
 
@@ -199,10 +315,18 @@ def main():
     (datasets, out_filenames,) = recommender_load(output_suffix="v2")
     [test10, test20, test5, train,] = datasets
     ppp.pprint(out_filenames)
-    ppp.pprint(test10[:]["user_id"])
-    ppp.pprint(test20[:]["user_id"])
-    ppp.pprint(test5[:]["user_id"])
-    ppp.pprint(train[:]["user_id"])
+    ppp.pprint(test10[:]["average_rating"])
+    # ppp.pprint(test10[:]["user_id"])
+    # print(f"total num_known for test10:\t{sum(test10[:]['num_known'])}")
+    # ppp.pprint(test20[:]["user_id"])
+    # print(f"total num_known for test20:\t{sum(test20[:]['num_known'])}")
+    # ppp.pprint(test5[:]["user_id"])
+    # print(f"total num_known for test5:\t{sum(test5[:]['num_known'])}")
+    # ppp.pprint(train[:]["user_id"])
+    print(f"total num_known for train:\t{sum(train[:]['num_known'])}")
+    print(
+        f"traing Dataset has a fill factor of {float(sum(train[:]['num_known'])) / float(len(train) * 1000)}"
+    )
 
 
 if __name__ == "__main__":
