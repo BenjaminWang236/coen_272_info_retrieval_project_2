@@ -146,9 +146,9 @@ def train_load(dataset, file, fileName):
             for column_index, rating in enumerate(line):
                 if line_id != prev_index and line_id != 0:
                     # Insert num_predict
-                    print(
-                        f"row: {prev_index} col: {column_index}'s num_known is: {known_counter} num_predict is: {predict_counter} for total of {known_counter + predict_counter} values"
-                    )
+                    # print(
+                    #     f"row: {prev_index} col: {column_index}'s num_known is: {known_counter} num_predict is: {predict_counter} for total of {known_counter + predict_counter} values"
+                    # )   # DEBUG # Works
                     dataset[prev_index]["num_known"] = known_counter
                     dataset[prev_index]["num_predict"] = predict_counter
                     # Insert the average of known ratings into the dataset's average_rating field:
@@ -156,7 +156,8 @@ def train_load(dataset, file, fileName):
                         dataset[prev_index][0]["known_ratings"][:known_counter]
                     ).astype(np.float64)
                     if int(np.round(dataset[prev_index]["average_rating"])) == 0:
-                        print(f"ERROR: Average of 0 means no known_rating")
+                        print(f"ERROR: Average of 0 means no known_rating. Quitting")
+                        quit()
                     # Reset counters
                     known_counter = 0
                     predict_counter = 0
@@ -190,9 +191,9 @@ def train_load(dataset, file, fileName):
                 # Last iteration only:
                 if (line_id + 1) == len(lines) and (column_index + 1) == len(line):
                     # Insert num_predict
-                    print(
-                        f"row: {prev_index} col: {column_index}'s num_known is: {known_counter} num_predict is: {predict_counter} for total of {known_counter + predict_counter} values"
-                    )
+                    # print(
+                    #     f"row: {prev_index} col: {column_index}'s num_known is: {known_counter} num_predict is: {predict_counter} for total of {known_counter + predict_counter} values"
+                    # )  # DEBUG # Works
                     dataset[prev_index]["num_known"] = known_counter
                     dataset[prev_index]["num_predict"] = predict_counter
                     # Insert the average of known ratings into the dataset's average_rating field:
@@ -200,7 +201,8 @@ def train_load(dataset, file, fileName):
                         dataset[prev_index][0]["known_ratings"][:known_counter]
                     ).astype(np.float64)
                     if int(np.round(dataset[prev_index]["average_rating"])) == 0:
-                        print(f"ERROR: Average of 0 means no known_rating")
+                        print(f"ERROR: Average of 0 means no known_rating. Quitting")
+                        quit()
 
         # Check if num_known + num_predict adds up to the number of line entries in file:
         if sum(dataset[:]["num_known"]) + sum(dataset[:]["num_predict"]) != (
@@ -324,7 +326,8 @@ def test_load(dataset, file):
                     dataset[prev_index][0]["known_ratings"][:known_counter]
                 ).astype(np.float64)
                 if int(np.round(dataset[prev_index]["average_rating"])) == 0:
-                    print(f"ERROR: Average of 0 means no known_rating")
+                    print(f"ERROR: Average of 0 means no known_rating. Quitting")
+                    quit()
                 # Reset counters
                 known_counter = 0
                 predict_counter = 0
@@ -384,7 +387,8 @@ def test_load(dataset, file):
                     dataset[prev_index][0]["known_ratings"][:known_counter]
                 ).astype(np.float64)
                 if int(np.round(dataset[prev_index]["average_rating"])) == 0:
-                    print(f"ERROR: Average of 0 means no known_rating")
+                    print(f"ERROR: Average of 0 means no known_rating. Quitting.")
+                    quit()
 
         # Check if num_known + num_predict adds up to the number of line entries in file:
         if sum(dataset[:]["num_known"]) + sum(dataset[:]["num_predict"]) != len(
@@ -486,14 +490,16 @@ def main():
     (datasets, out_filenames,) = recommender_import(output_suffix="v2")
     [test10, test20, test5, train,] = datasets
     ppp.pprint(out_filenames)
-    ppp.pprint(test10[:]["average_rating"])
+    # ppp.pprint(test10[:]["average_rating"])
     # ppp.pprint(test10[:]["user_id"])
     # print(f"total num_known for test10:\t{sum(test10[:]['num_known'])}")
     # ppp.pprint(test20[:]["user_id"])
     # print(f"total num_known for test20:\t{sum(test20[:]['num_known'])}")
+    ppp.pprint(test5[0])
     # ppp.pprint(test5[:]["user_id"])
     # print(f"total num_known for test5:\t{sum(test5[:]['num_known'])}")
     # ppp.pprint(train[:]["user_id"])
+    ppp.pprint(train[-1]["known_indices"])
     print(f"total num_known for train:\t{sum(train[:]['num_known'])}")
     print(
         f"traing Dataset has a fill factor of {float(sum(train[:]['num_known'])) / float(len(train) * 1000)}"
