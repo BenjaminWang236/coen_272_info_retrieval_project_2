@@ -46,24 +46,24 @@ Accessible as:
 recommender_type = np.dtype(
     [
         ("user_id", np.uint16),  # 1-based
-        ("num_known", np.uint16),
-        ("known_indices", np.uint16, (1000, 1)),  # 1-based
+        ("num_known", np.uint32),
+        ("known_indices", np.uint32, (1000, 1)),  # 1-based
         (
             "known_ratings",
             np.float32,
             (1000, 1),
         ),  # Pearson Ratings are Floats [-1, 1] # Index (0-based) of ratings + 1 = Item-ID as given (1-based)
         ("average_rating", np.float64),  # Average of Known Ratings
-        ("num_predict", np.int16),  # -1 for unknown
-        ("predict_indices", np.uint16, (1000, 1)),  # 1-based
+        ("num_predict", np.int32),  # -1 for unknown
+        ("predict_indices", np.uint32, (1000, 1)),  # 1-based
         (
             "predict_ratings",
             np.float32,
             (1000, 1),
         ),  # Index (0-based) of ratings + 1 = Item-ID as given (1-based)
         ("prediction_done", np.bool_),
-        ("num_neighbors", np.uint16),
-        ("neighbor_ids", np.uint16, (200, 1)),
+        ("num_neighbors", np.uint32),
+        ("neighbor_ids", np.uint32, (200, 1)),
         ("neighbor_weights", np.float32, (200, 1)),
     ]
 )
@@ -114,6 +114,106 @@ def train_load(dataset, file, fileName):
     Returns:
         [type]: [description]
     """
+    # Training dataset is 200 users, each with 1000 known/given ratings and 0 predictions
+    with open(file, "r") as f:
+        fileContents = f.read().strip().splitlines()  # 200 lines of user ratings
+        print(f"{fileName} has {len(fileContents)} users")
+        lines = [
+            line.split("\t") for line in fileContents
+        ]  # Split each line into a list of ints with delimiter "\t" tab
+        # for line in lines:    # Somehow this didn't work, numbers remain as strings
+        for i in range(len(lines)):
+            lines[i] = [
+                int(word) for word in lines[i] if word.isdigit()
+            ]  # Convert to ints
+            # for word in line:
+            #     if word.isdigit():
+            #         word = int(word)
+            #     else:
+            #         print(f"{word} is not an int")  # DEBUG # Works
+        # print(f"{fileName} has {len(lines[0])} ratings for each row")
+        # print(f"line 0:\n{lines[0]}")
+        # print(type(lines[0][0]))
+        print(f"lines size: {len(lines)} x {len(lines[0])}")
+
+        # known_ratings is still Compressed Notation, only store indices of known ratings, but predict_ratings is IGNORED
+        # Go through each user, insert known_ratings
+        # Compare current dataset_index with previous dataset_index to see if user_id has changed
+        prev_index = -1
+        # If user_id has changed, restart the internal known counters
+        known_counter, predict_counter = 0, 0
+        for line_id, line in enumerate(lines):
+            for column_index, rating in enumerate(line):
+                if line_id != prev_index and line_id != 0:
+                    # Insert num_predict
+                    print(
+                        f"row: {prev_index} col: {column_index}'s num_known is: {known_counter} num_predict is: {predict_counter} for total of {known_counter + predict_counter} values"
+                    )
+                    dataset[prev_index]["num_known"] = known_counter
+                    dataset[prev_index]["num_predict"] = predict_counter
+                    # Insert the average of known ratings into the dataset's average_rating field:
+                    dataset[prev_index]["average_rating"] = np.mean(
+                        dataset[prev_index][0]["known_ratings"][:known_counter]
+                    ).astype(np.float64)
+                    if int(np.round(dataset[prev_index]["average_rating"])) == 0:
+                        print(f"ERROR: Average of 0 means no known_rating")
+                    # Reset counters
+                    known_counter = 0
+                    predict_counter = 0
+                prev_index = line_id
+
+                # Insert: known_ratings, num_predict, predict_ratings
+                # known ratings and predict_ratings need an internal counter to keep track of the number of known/predict ratings
+                # At end insert internal counter of num_predit_ratings into num_predict
+                # known_indices, predict_indices = [], []
+                if rating != 0 and rating in range(1, 6, 1):
+                    # Out of Bound error was because the indices/ratings are 2D arrays of size (1000, 1), so need to access row 0 first with [0]
+                    dataset[line_id][0]["known_indices"][known_counter] = (
+                        column_index + 1
+                    )
+                    dataset[line_id][0]["known_ratings"][known_counter] = rating
+                    known_counter += 1
+                elif rating == 0:
+                    # IGNORED
+                    # Out of Bound error was because the indices/ratings are 2D arrays of size (1000, 1), so need to access row 0 first with [0]
+                    dataset[line_id][0]["predict_indices"][predict_counter] = (
+                        column_index + 1
+                    )
+                    dataset[line_id][0]["predict_ratings"][predict_counter] = rating
+                    predict_counter += 1
+                else:
+                    print(
+                        f"Error: file '{file}' line_index: {line_id} column_index: {column_index} rating: {rating} is neither 0 nor within [1-5]. Invalid Rating. Quitting."
+                    )
+                    quit()
+
+                # Last iteration only:
+                if (line_id + 1) == len(lines) and (column_index + 1) == len(line):
+                    # Insert num_predict
+                    print(
+                        f"row: {prev_index} col: {column_index}'s num_known is: {known_counter} num_predict is: {predict_counter} for total of {known_counter + predict_counter} values"
+                    )
+                    dataset[prev_index]["num_known"] = known_counter
+                    dataset[prev_index]["num_predict"] = predict_counter
+                    # Insert the average of known ratings into the dataset's average_rating field:
+                    dataset[prev_index]["average_rating"] = np.mean(
+                        dataset[prev_index][0]["known_ratings"][:known_counter]
+                    ).astype(np.float64)
+                    if int(np.round(dataset[prev_index]["average_rating"])) == 0:
+                        print(f"ERROR: Average of 0 means no known_rating")
+
+        # Check if num_known + num_predict adds up to the number of line entries in file:
+        if sum(dataset[:]["num_known"]) + sum(dataset[:]["num_predict"]) != (
+            len(lines) * len(lines[0])
+        ):
+            print(
+                f"Error: num_known: {sum(dataset[:]['num_known'])} + num_predict: {sum(dataset[:]['num_predict'])} in file '{file}' does not equal number of values in file {len(lines) * len(lines[0])}. Quitting."
+            )
+            quit()
+        else:
+            print(
+                f"file '{file}' total num_known: {sum(dataset[:]['num_known'])} + total num_predict: {sum(dataset[:]['num_predict'])} = {sum(dataset[:]['num_known']) + sum(dataset[:]['num_predict'])} == number of values in file: {len(lines) * len(lines[0])}"
+            )
 
     return dataset
 
@@ -317,7 +417,7 @@ def test_init_load(file, fileName, output_suffix):
     return dataset, out_filename
 
 
-def recommender_load(
+def recommender_import(
     output_suffix: str = "",
     filetype: str = ".txt",
     exclusion: str = "result",
@@ -383,7 +483,7 @@ def main():
     """
     Driver function for Recommender System / User-based Collaborative Filtering Project.
     """
-    (datasets, out_filenames,) = recommender_load(output_suffix="v2")
+    (datasets, out_filenames,) = recommender_import(output_suffix="v2")
     [test10, test20, test5, train,] = datasets
     ppp.pprint(out_filenames)
     ppp.pprint(test10[:]["average_rating"])
