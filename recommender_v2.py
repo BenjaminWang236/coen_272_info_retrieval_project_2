@@ -640,6 +640,21 @@ def calcPredictions_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarray):
         testSet[i]["prediction_done"] = np.True_
 
 
+def writeOutputToFile(testSet: np.ndarray, outputFile: str):
+    """[summary]
+
+    Args:
+        testSet (np.ndarray): [description]
+        outputFile (str): [description]
+    """
+    with open(outputFile, "w") as f:
+        for i in range(len(testSet)):
+            for j in range(testSet[i]["num_predict"]):
+                f.write(
+                    f"{testSet[i]['user_id']} {testSet[i]['predict_indices'][j]} {testSet[i]['predict_ratings'][j].astype(int)}\n"
+                )
+
+
 # M_j (Count of number of users that have rated item j) for all 1000 items
 
 
@@ -665,6 +680,7 @@ def main():
     print(min(test10[:]["num_neighbor"]))
     # ppp.pprint(test10[32]["neighbor_ids"][: test10[32]["num_neighbor"]])
     # ppp.pprint(test10[32]["neighbor_weights"][: test10[32]["num_neighbor"]])
+    [writeOutputToFile(test, out_filenames[idx]) for idx, test in enumerate(testSets)]
 
 
 if __name__ == "__main__":
