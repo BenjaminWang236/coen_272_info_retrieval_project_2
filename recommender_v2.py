@@ -45,32 +45,32 @@ Accessible as:
 """
 recommender_type = np.dtype(
     [
-        ("user_id", np.uint16),  # 1-based
+        ("user_id", np.uint32),  # 1-based
         ("num_known", np.uint32),
-        ("known_indices", np.uint32, (1000, 1)),  # 1-based
+        ("known_indices", np.uint32, (1000,)),  # 1-based
         (
             "known_ratings",
             np.float32,
-            (1000, 1),
+            (1000,),
         ),  # Pearson Ratings are Floats [-1, 1] # Index (0-based) of ratings + 1 = Item-ID as given (1-based)
         ("average_rating", np.float64),  # Average of Known Ratings
         ("num_predict", np.int32),  # -1 for unknown
-        ("predict_indices", np.uint32, (1000, 1)),  # 1-based
+        ("predict_indices", np.uint32, (1000,)),  # 1-based
         (
             "predict_ratings",
             np.float32,
-            (1000, 1),
+            (1000,),
         ),  # Index (0-based) of ratings + 1 = Item-ID as given (1-based)
         ("prediction_done", np.bool_),
         ("num_neighbors", np.uint32),
-        ("neighbor_ids", np.uint32, (200, 1)),
-        ("neighbor_weights", np.float32, (200, 1)),
+        ("neighbor_ids", np.uint32, (200,)),  # 1-based
+        ("neighbor_weights", np.float32, (200,)),
     ]
 )
 
 
 def recommender_init(
-    dataset_size: tuple = (200, 1),
+    dataset_size: tuple = (200,),
     user_id_offset: int = 1,
     num_known: int = 1000,
     num_predict: int = 0,
@@ -83,7 +83,7 @@ def recommender_init(
     By default, initialize to a dataset of 200 users, each with 1000 known ratings, and 0 predictions. (Training Dataset)
 
     Args:
-        dataset_size (tuple, optional): Shape of dataset. Defaults to (200, 1).
+        dataset_size (tuple, optional): Shape of dataset. Defaults to (200,). For vectors DO NOT use (#, 1), use (#,) instead.
         user_id_offset (int, optional): Given dataset is 1-based indexing. Defaults to 1.
         num_known (int, optional): Number of Known Ratings. Defaults to 1000.
         num_predict (int, optional): Number of Unknown Ratings to Predict. -1 if this is not known yet. Defaults to 0.
@@ -153,7 +153,7 @@ def train_load(dataset, file, fileName):
                     dataset[prev_index]["num_predict"] = predict_counter
                     # Insert the average of known ratings into the dataset's average_rating field:
                     dataset[prev_index]["average_rating"] = np.mean(
-                        dataset[prev_index][0]["known_ratings"][:known_counter]
+                        dataset[prev_index]["known_ratings"][:known_counter]
                     ).astype(np.float64)
                     if int(np.round(dataset[prev_index]["average_rating"])) == 0:
                         print(f"ERROR: Average of 0 means no known_rating. Quitting")
@@ -168,19 +168,14 @@ def train_load(dataset, file, fileName):
                 # At end insert internal counter of num_predit_ratings into num_predict
                 # known_indices, predict_indices = [], []
                 if rating != 0 and rating in range(1, 6, 1):
-                    # Out of Bound error was because the indices/ratings are 2D arrays of size (1000, 1), so need to access row 0 first with [0]
-                    dataset[line_id][0]["known_indices"][known_counter] = (
-                        column_index + 1
-                    )
-                    dataset[line_id][0]["known_ratings"][known_counter] = rating
+                    dataset[line_id]["known_indices"][known_counter] = column_index + 1
+                    dataset[line_id]["known_ratings"][known_counter] = rating
                     known_counter += 1
                 elif rating == 0:
-                    # IGNORED
-                    # Out of Bound error was because the indices/ratings are 2D arrays of size (1000, 1), so need to access row 0 first with [0]
-                    dataset[line_id][0]["predict_indices"][predict_counter] = (
+                    dataset[line_id]["predict_indices"][predict_counter] = (
                         column_index + 1
                     )
-                    dataset[line_id][0]["predict_ratings"][predict_counter] = rating
+                    dataset[line_id]["predict_ratings"][predict_counter] = rating
                     predict_counter += 1
                 else:
                     print(
@@ -192,15 +187,15 @@ def train_load(dataset, file, fileName):
                 if (line_id + 1) == len(lines) and (column_index + 1) == len(line):
                     # Insert num_predict
                     # print(
-                    #     f"row: {prev_index} col: {column_index}'s num_known is: {known_counter} num_predict is: {predict_counter} for total of {known_counter + predict_counter} values"
+                    #     f"row: {line_id} col: {column_index}'s num_known is: {known_counter} num_predict is: {predict_counter} for total of {known_counter + predict_counter} values"
                     # )  # DEBUG # Works
-                    dataset[prev_index]["num_known"] = known_counter
-                    dataset[prev_index]["num_predict"] = predict_counter
+                    dataset[line_id]["num_known"] = known_counter
+                    dataset[line_id]["num_predict"] = predict_counter
                     # Insert the average of known ratings into the dataset's average_rating field:
-                    dataset[prev_index]["average_rating"] = np.mean(
-                        dataset[prev_index][0]["known_ratings"][:known_counter]
+                    dataset[line_id]["average_rating"] = np.mean(
+                        dataset[line_id]["known_ratings"][:known_counter]
                     ).astype(np.float64)
-                    if int(np.round(dataset[prev_index]["average_rating"])) == 0:
+                    if int(np.round(dataset[line_id]["average_rating"])) == 0:
                         print(f"ERROR: Average of 0 means no known_rating. Quitting")
                         quit()
 
@@ -269,7 +264,7 @@ def test_init(file, fileName, output_suffix):
 
     # Initialize test dataset
     dataset = recommender_init(
-        dataset_size=(100, 1),  # 100 users for all 3 test datasets
+        dataset_size=(100,),  # 100 users for all 3 test datasets
         user_id_offset=offset,
         num_known=int(fileName[len("test") :]),
         num_predict=unknownNumPred,
@@ -323,7 +318,7 @@ def test_load(dataset, file):
                     quit()
                 # Insert the average of known ratings into the dataset's average_rating field:
                 dataset[prev_index]["average_rating"] = np.mean(
-                    dataset[prev_index][0]["known_ratings"][:known_counter]
+                    dataset[prev_index]["known_ratings"][:known_counter]
                 ).astype(np.float64)
                 if int(np.round(dataset[prev_index]["average_rating"])) == 0:
                     print(f"ERROR: Average of 0 means no known_rating. Quitting")
@@ -338,32 +333,18 @@ def test_load(dataset, file):
             # At end insert internal counter of num_predit_ratings into num_predict
             # known_indices, predict_indices = [], []
             if ratings[line_id] != 0 and ratings[line_id] in range(1, 6, 1):
-                # print(
-                #     f"file '{file}' line: {line_id} dataset_index: {dataset_index} known_counter: {known_counter}"
-                # )  # DEBUG  # Works
-                # print(
-                #     f"Checking known_indices array:\n{dataset[dataset_index][0]['known_indices'][known_counter]}"
-                # )  # DEBUG  # Works
-                # Out of Bound error was because the indices/ratings are 2D arrays of size (1000, 1), so need to access row 0 first with [0]
-                dataset[dataset_index][0]["known_indices"][
-                    known_counter
-                ] = item_indices[line_id]
-                dataset[dataset_index][0]["known_ratings"][known_counter] = ratings[
+                dataset[dataset_index]["known_indices"][known_counter] = item_indices[
+                    line_id
+                ]
+                dataset[dataset_index]["known_ratings"][known_counter] = ratings[
                     line_id
                 ]
                 known_counter += 1
             elif ratings[line_id] == 0:
-                # print(
-                #     f"file '{file}' line: {line_id} dataset_index: {dataset_index} predict_counter: {predict_counter}"
-                # )  # DEBUG  # Works
-                # print(
-                #     f"Checking predict_indices array:\n{dataset[dataset_index][0]['predict_indices'][predict_counter]}"
-                # )  # DEBUG  # Works
-                # Out of Bound error was because the indices/ratings are 2D arrays of size (1000, 1), so need to access row 0 first with [0]
-                dataset[dataset_index][0]["predict_indices"][
+                dataset[dataset_index]["predict_indices"][
                     predict_counter
                 ] = item_indices[line_id]
-                dataset[dataset_index][0]["predict_ratings"][predict_counter] = ratings[
+                dataset[dataset_index]["predict_ratings"][predict_counter] = ratings[
                     line_id
                 ]
                 predict_counter += 1
@@ -384,7 +365,7 @@ def test_load(dataset, file):
                     quit()
                 # Insert the average of known ratings into the dataset's average_rating field:
                 dataset[prev_index]["average_rating"] = np.mean(
-                    dataset[prev_index][0]["known_ratings"][:known_counter]
+                    dataset[prev_index]["known_ratings"][:known_counter]
                 ).astype(np.float64)
                 if int(np.round(dataset[prev_index]["average_rating"])) == 0:
                     print(f"ERROR: Average of 0 means no known_rating. Quitting.")
@@ -480,6 +461,112 @@ def recommender_import(
     return datasets, output_filenames
 
 
+def calcNeighborWeights_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarray):
+    """[summary]
+
+    Args:
+        testSet (np.ndarray): [description]
+        trainSet (np.ndarray): [description]
+    """
+    # Go through each test user in testSet and calculate the cosine similarity of each test user with each neighboring train user
+    for i in range(len(testSet)):
+        # for i in range(1):  # DEBUG
+        for j in range(len(trainSet)):
+            # Neighbor is defined as a train user who shares at least 1 known item-rating with the test user's known item-ratings
+            # AND the train user must have the item-rating that the test user does not have / need to predict
+            # For pearsons correlation, subtract each rating from the average rating of the user to get the user's rating deviation
+            sharedItemRatings = np.intersect1d(
+                testSet[i]["known_indices"][: testSet[i]["num_known"]],
+                trainSet[j]["known_indices"][: trainSet[j]["num_known"]],
+            )
+            # print(
+            #     f"Test user_id {testSet[i]['user_id']} & Train user_id {trainSet[j]['user_id']} shares {len(sharedItemRatings)} ratings at indices:",
+            #     end="\t",
+            # )
+            # ppp.pprint(sharedItemRatings)
+            # Check if the training user has a non-empty rating for the item that the test user needs to predict
+            TrainKnowsTestPredictItemRatings = np.intersect1d(
+                testSet[i]["predict_indices"][: testSet[i]["num_predict"]],
+                trainSet[j]["known_indices"][: trainSet[j]["num_known"]],
+            )
+            # ppp.pprint(
+            #     f"Train user has {len(TrainKnowsTestPredictItemRatings)} ratings that the test user needs to predict (at indices): {TrainKnowsTestPredictItemRatings}"
+            # )
+            if (
+                len(TrainKnowsTestPredictItemRatings) == 0
+                or len(sharedItemRatings) == 0
+            ):
+                # if len(TrainKnowsTestPredictItemRatings) == 0:
+                #     print(f"{len(TrainKnowsTestPredictItemRatings)}")
+                # else:
+                #     print(f"{len(sharedItemRatings)}")
+                continue
+            else:
+                # Calculate cosine similarity of test user with train user, add train user_id to
+                # test user's neighbor_ids, increment test user's num_neighbors, and add cosine
+                # similarity to test user's neighbor_weights
+
+                # Calculate the indices of the shared known item-ratings' indices for test and train users:
+                test_shared_indices_indices = [
+                    np.where(
+                        testSet[i]["known_indices"][: testSet[i]["num_known"]]
+                        == itemRating
+                    )[0][0]
+                    for itemRating in sharedItemRatings
+                ]
+                train_shared_indices_indices = [
+                    np.where(
+                        trainSet[j]["known_indices"][: trainSet[j]["num_known"]]
+                        == itemRating
+                    )[0][0]
+                    for itemRating in sharedItemRatings
+                ]
+                # print(f"test_shared_indices_indices: {test_shared_indices_indices}")
+                # print(f"train_shared_indices_indices: {train_shared_indices_indices}")
+                sumOfProduct, sumOfSquaresU1, sumOfSquaresU2 = 0, 0, 0
+                for k in range(len(sharedItemRatings)):
+                    sumOfProduct += (
+                        testSet[i]["known_ratings"][test_shared_indices_indices[k]]
+                        * trainSet[j]["known_ratings"][train_shared_indices_indices[k]]
+                    )
+                    sumOfSquaresU1 += (
+                        testSet[i]["known_ratings"][test_shared_indices_indices[k]] ** 2
+                    )
+                    sumOfSquaresU2 += (
+                        trainSet[j]["known_ratings"][train_shared_indices_indices[k]]
+                        ** 2
+                    )
+                    # print(
+                    #     f"test value: {testSet[i]['known_ratings'][test_shared_indices_indices[k]]} * train value: {trainSet[j]['known_ratings'][train_shared_indices_indices[k]]} sumOfProduct: {sumOfProduct}"
+                    # )  # DEBUG # Worked
+                    # print(
+                    #     f"sumOfSquaresU1: {sumOfSquaresU1}, sumOfSquaresU2: {sumOfSquaresU2}"
+                    # )
+                cosineSimilarity = sumOfProduct / (
+                    math.sqrt(sumOfSquaresU1) * math.sqrt(sumOfSquaresU2)
+                )
+                # print(f"Cosine Similarity (Weight): {cosineSimilarity}")
+
+                testSet[i]["neighbor_weights"][
+                    testSet[i]["num_neighbors"]
+                ] = cosineSimilarity
+                # trainSet[j]["neighbor_weights"][
+                #     trainSet[j]["num_neighbors"]
+                # ] = cosineSimilarity
+                testSet[i]["neighbor_ids"][testSet[i]["num_neighbors"]] = trainSet[j][
+                    "user_id"
+                ]
+                # trainSet[j]["neighbor_ids"][trainSet[j]["num_neighbors"]] = testSet[i][
+                #     "user_id"
+                # ]
+                trainSet[j]["num_neighbors"] += 1
+                testSet[i]["num_neighbors"] += 1
+
+
+def calcPredictions_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarray):
+    ...
+
+
 # M_j (Count of number of users that have rated item j) for all 1000 items
 
 
@@ -488,22 +575,21 @@ def main():
     Driver function for Recommender System / User-based Collaborative Filtering Project.
     """
     (datasets, out_filenames,) = recommender_import(output_suffix="v2")
-    [test10, test20, test5, train,] = datasets
+    # [test10, test20, test5, train,] = datasets
+    testSets = datasets[:3]
+    train = datasets[3]
+    [test10, test20, test5] = testSets
     ppp.pprint(out_filenames)
-    # ppp.pprint(test10[:]["average_rating"])
-    # ppp.pprint(test10[:]["user_id"])
-    # print(f"total num_known for test10:\t{sum(test10[:]['num_known'])}")
-    # ppp.pprint(test20[:]["user_id"])
-    # print(f"total num_known for test20:\t{sum(test20[:]['num_known'])}")
-    ppp.pprint(test5[0])
-    # ppp.pprint(test5[:]["user_id"])
-    # print(f"total num_known for test5:\t{sum(test5[:]['num_known'])}")
-    # ppp.pprint(train[:]["user_id"])
-    ppp.pprint(train[-1]["known_indices"])
+    ppp.pprint(test10[0]["known_indices"][: test10[0]["num_known"]])
+    ppp.pprint(train[0]["known_indices"][: train[0]["num_known"]])
     print(f"total num_known for train:\t{sum(train[:]['num_known'])}")
     print(
         f"traing Dataset has a fill factor of {float(sum(train[:]['num_known'])) / float(len(train) * 1000)}"
     )
+    [calcNeighborWeights_CosineSimilarity(test, train) for test in testSets]
+    [calcPredictions_CosineSimilarity(test, train) for test in testSets]
+    print(max(test10[:]["num_neighbors"]))
+    print(min(test10[:]["num_neighbors"]))
 
 
 if __name__ == "__main__":
