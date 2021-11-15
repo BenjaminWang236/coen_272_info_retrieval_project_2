@@ -19,7 +19,7 @@ rec_indices = {
     "predict_indices": 6,
     "predict_ratings": 7,
     "prediction_done": 8,
-    "num_neighbors": 9,
+    "num_neighbor": 9,
     "neighbor_ids": 10,
     "neighbor_weights": 11,
 }
@@ -62,7 +62,7 @@ recommender_type = np.dtype(
             (1000,),
         ),  # Index (0-based) of ratings + 1 = Item-ID as given (1-based)
         ("prediction_done", np.bool_),
-        ("num_neighbors", np.uint32),
+        ("num_neighbor", np.uint32),
         ("neighbor_ids", np.uint32, (200,)),  # 1-based
         ("neighbor_weights", np.float32, (200,)),
     ]
@@ -503,7 +503,7 @@ def calcNeighborWeights_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarr
                 continue
             else:
                 # Calculate cosine similarity of test user with train user, add train user_id to
-                # test user's neighbor_ids, increment test user's num_neighbors, and add cosine
+                # test user's neighbor_ids, increment test user's num_neighbor, and add cosine
                 # similarity to test user's neighbor_weights
 
                 # Calculate the indices of the shared known item-ratings' indices for test and train users:
@@ -548,23 +548,96 @@ def calcNeighborWeights_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarr
                 # print(f"Cosine Similarity (Weight): {cosineSimilarity}")
 
                 testSet[i]["neighbor_weights"][
-                    testSet[i]["num_neighbors"]
+                    testSet[i]["num_neighbor"]
                 ] = cosineSimilarity
                 # trainSet[j]["neighbor_weights"][
-                #     trainSet[j]["num_neighbors"]
+                #     trainSet[j]["num_neighbor"]
                 # ] = cosineSimilarity
-                testSet[i]["neighbor_ids"][testSet[i]["num_neighbors"]] = trainSet[j][
+                testSet[i]["neighbor_ids"][testSet[i]["num_neighbor"]] = trainSet[j][
                     "user_id"
                 ]
-                # trainSet[j]["neighbor_ids"][trainSet[j]["num_neighbors"]] = testSet[i][
+                # trainSet[j]["neighbor_ids"][trainSet[j]["num_neighbor"]] = testSet[i][
                 #     "user_id"
                 # ]
-                trainSet[j]["num_neighbors"] += 1
-                testSet[i]["num_neighbors"] += 1
+                trainSet[j]["num_neighbor"] += 1
+                testSet[i]["num_neighbor"] += 1
 
 
 def calcPredictions_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarray):
-    ...
+    """[summary]
+
+    Args:
+        testSet (np.ndarray): [description]
+        trainSet (np.ndarray): [description]
+    """
+    # For each user in the testing set
+    for i in range(len(testSet)):
+        # For each empty item-rating that the test user needs to predict
+        for j in range(testSet[i]["num_predict"]):
+            # Item that needs predicting's index:
+            item_index = testSet[i]["predict_indices"][j]
+            sumRelevantWeights, sumWeightRatingProduct = 0, 0
+            numRelevantNeighbors = 0
+            # For each neighbor who has a known item-rating that the test user needs to predict: # "For similar k users"
+            for k in range(testSet[i]["num_neighbor"]):
+                neighbor_id = testSet[i]["neighbor_ids"][k]  # 1-based id of neighbor
+                # Check this particular neighbor has the desired item-rating, since previous superset is for all desired item-ratings of this test user:
+                check_neighbor_has_item_rating = np.where(
+                    trainSet[neighbor_id - 1]["known_indices"][
+                        : trainSet[neighbor_id - 1]["num_known"]
+                    ]
+                    == item_index
+                )[0]
+                if len(check_neighbor_has_item_rating) == 0:
+                    # This mean this neighbor have 1 or more known item-ratings the test user needs to predict but not this particular item-rating
+                    # print(
+                    #     f"Train user {trainSet[neighbor_id-1]['user_id']} is a neighbor but doesn't have a rating for item {item_index}"
+                    # )
+                    continue
+                else:
+                    # Reaching here means the train_user is a neighbor, and has the desired item-rating that test user needs to predict
+                    numRelevantNeighbors += 1
+                    # print(
+                    #     trainSet[neighbor_id - 1]["known_ratings"][
+                    #         check_neighbor_has_item_rating[0]
+                    #     ],
+                    #     end=" ",
+                    # )
+                    sumWeightRatingProduct += (
+                        testSet[i]["neighbor_weights"][k]
+                        * trainSet[neighbor_id - 1]["known_ratings"][
+                            check_neighbor_has_item_rating[0]
+                        ]
+                    )
+                    sumRelevantWeights += testSet[i]["neighbor_weights"][k]
+            if numRelevantNeighbors == 0:
+                print(
+                    f"WARNING: No neighbor with desired item-rating of item index {item_index} has been found for test user {testSet[i]['user_id']}!!!"
+                )
+                testSet[i]["predict_ratings"][
+                    j
+                ] = 3  # Default Rating for this exact scenario
+            else:
+
+                rating_prediction = (
+                    sumWeightRatingProduct / sumRelevantWeights
+                    if sumRelevantWeights != 0
+                    else 0
+                )
+                rating_prediction = np.around(rating_prediction, decimals=0)
+                rating_prediction = rating_prediction.astype(int)
+                if rating_prediction > 5 or rating_prediction < 1:
+                    print(
+                        f"WARNING: Rating prediction error of {rating_prediction} at test user {testSet[i]['user_id']} item {item_index}: nominator: {sumWeightRatingProduct}, denominator: {sumRelevantWeights}"
+                    )
+                    if rating_prediction == 0:
+                        rating_prediction = 3  # Default Rating for this above scenario
+                    if rating_prediction > 5:
+                        rating_prediction = 5
+                    if rating_prediction < 1:
+                        rating_prediction = 1
+                testSet[i]["predict_ratings"][j] = rating_prediction
+        testSet[i]["prediction_done"] = np.True_
 
 
 # M_j (Count of number of users that have rated item j) for all 1000 items
@@ -588,8 +661,10 @@ def main():
     )
     [calcNeighborWeights_CosineSimilarity(test, train) for test in testSets]
     [calcPredictions_CosineSimilarity(test, train) for test in testSets]
-    print(max(test10[:]["num_neighbors"]))
-    print(min(test10[:]["num_neighbors"]))
+    print(max(test10[:]["num_neighbor"]))
+    print(min(test10[:]["num_neighbor"]))
+    # ppp.pprint(test10[32]["neighbor_ids"][: test10[32]["num_neighbor"]])
+    # ppp.pprint(test10[32]["neighbor_weights"][: test10[32]["num_neighbor"]])
 
 
 if __name__ == "__main__":
