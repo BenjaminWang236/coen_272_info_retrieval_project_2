@@ -3,6 +3,7 @@ import pprintpp as ppp
 import glob, os
 import numpy as np
 import math
+import copy
 
 # Global variables
 emptyRating = 0
@@ -15,13 +16,14 @@ rec_indices = {
     "known_indices": 2,
     "known_ratings": 3,
     "average_rating": 4,
-    "num_predict": 5,
-    "predict_indices": 6,
-    "predict_ratings": 7,
-    "prediction_done": 8,
-    "num_neighbor": 9,
-    "neighbor_ids": 10,
-    "neighbor_weights": 11,
+    "centered": 5,
+    "num_predict": 6,
+    "predict_indices": 7,
+    "predict_ratings": 8,
+    "prediction_done": 9,
+    "num_neighbor": 10,
+    "neighbor_ids": 11,
+    "neighbor_weights": 12,
 }
 
 """
@@ -54,6 +56,7 @@ recommender_type = np.dtype(
             (1000,),
         ),  # Pearson Ratings are Floats [-1, 1] # Index (0-based) of ratings + 1 = Item-ID as given (1-based)
         ("average_rating", np.float64),  # Average of Known Ratings
+        ("centered", np.bool_),  # Centered or not, Boolean
         ("num_predict", np.int32),  # -1 for unknown
         ("predict_indices", np.uint32, (1000,)),  # 1-based
         (
@@ -75,6 +78,7 @@ def recommender_init(
     num_known: int = 1000,
     num_predict: int = 0,
     prediction_done: np.bool_ = np.True_,
+    centered: np.bool_ = np.False_,
 ):
     """
     Initialize a Recommender System / User-based Collaborative Filtering dataset.
@@ -97,6 +101,7 @@ def recommender_init(
     for user_id, user in enumerate(dataset):
         user["user_id"] = user_id + user_id_offset
         user["num_known"] = num_known
+        user["centered"] = centered
         user["num_predict"] = num_predict
         user["prediction_done"] = prediction_done
 
@@ -117,7 +122,7 @@ def train_load(dataset, file, fileName):
     # Training dataset is 200 users, each with 1000 known/given ratings and 0 predictions
     with open(file, "r") as f:
         fileContents = f.read().strip().splitlines()  # 200 lines of user ratings
-        print(f"{fileName} has {len(fileContents)} users")
+        # print(f"{fileName} has {len(fileContents)} users")
         lines = [
             line.split("\t") for line in fileContents
         ]  # Split each line into a list of ints with delimiter "\t" tab
@@ -126,16 +131,6 @@ def train_load(dataset, file, fileName):
             lines[i] = [
                 int(word) for word in lines[i] if word.isdigit()
             ]  # Convert to ints
-            # for word in line:
-            #     if word.isdigit():
-            #         word = int(word)
-            #     else:
-            #         print(f"{word} is not an int")  # DEBUG # Works
-        # print(f"{fileName} has {len(lines[0])} ratings for each row")
-        # print(f"line 0:\n{lines[0]}")
-        # print(type(lines[0][0]))
-        print(f"lines size: {len(lines)} x {len(lines[0])}")
-
         # known_ratings is still Compressed Notation, only store indices of known ratings, but predict_ratings is IGNORED
         # Go through each user, insert known_ratings
         # Compare current dataset_index with previous dataset_index to see if user_id has changed
@@ -146,9 +141,6 @@ def train_load(dataset, file, fileName):
             for column_index, rating in enumerate(line):
                 if line_id != prev_index and line_id != 0:
                     # Insert num_predict
-                    # print(
-                    #     f"row: {prev_index} col: {column_index}'s num_known is: {known_counter} num_predict is: {predict_counter} for total of {known_counter + predict_counter} values"
-                    # )   # DEBUG # Works
                     dataset[prev_index]["num_known"] = known_counter
                     dataset[prev_index]["num_predict"] = predict_counter
                     # Insert the average of known ratings into the dataset's average_rating field:
@@ -185,10 +177,6 @@ def train_load(dataset, file, fileName):
 
                 # Last iteration only:
                 if (line_id + 1) == len(lines) and (column_index + 1) == len(line):
-                    # Insert num_predict
-                    # print(
-                    #     f"row: {line_id} col: {column_index}'s num_known is: {known_counter} num_predict is: {predict_counter} for total of {known_counter + predict_counter} values"
-                    # )  # DEBUG # Works
                     dataset[line_id]["num_known"] = known_counter
                     dataset[line_id]["num_predict"] = predict_counter
                     # Insert the average of known ratings into the dataset's average_rating field:
@@ -259,8 +247,6 @@ def test_init(file, fileName, output_suffix):
     with open(file, "r") as f:
         first_line = f.readline().strip()
         offset = [int(word) for word in first_line.split() if word.isdigit()][0]
-        # print(f"first line of file '{file}':\t{numbers}")  # DEBUG   # Works
-        # print(f"file '{file}' User_ID offset:\t{offset}")  # DEBUG   # Works
 
     # Initialize test dataset
     dataset = recommender_init(
@@ -285,16 +271,12 @@ def test_load(dataset, file):
     """
     with open(file, "r") as f:
         fileContents = f.read().strip().splitlines()
-        # print(fileContents)  # DEBUG   # Works
-        # print(f"file '{file}' num lines: {len(fileContents)}")  # DEBUG   # Works
         user_indices, item_indices, ratings = [], [], []
         for line in fileContents:
             [a, b, c] = [int(word) for word in line.split() if word.isdigit()]
             user_indices.append(a)
             item_indices.append(b)
             ratings.append(c)
-        # print(f"file '{file}' user_indices: {user_indices}")    # DEBUG   # Works
-        # num_known = dataset[0]["num_known"]
 
         # Go through each user, insert known_ratings, count num_predict, and insert predict_ratings
         # Compare current dataset_index with previous dataset_index to see if user_id has changed
@@ -306,7 +288,6 @@ def test_load(dataset, file):
             dataset_index = np.where(dataset[:]["user_id"] == user_indices[line_id])[0][
                 0
             ]
-            # print(f"line: {line_id} dataset_index: {dataset_index}")    # DEBUG   # Works
 
             if dataset_index != prev_index and line_id != 0:
                 # Insert num_predict and check if num_known is correct
@@ -461,13 +442,46 @@ def recommender_import(
     return datasets, output_filenames
 
 
-def calcNeighborWeights_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarray):
+def calcNeighborWeights(
+    testSet: np.ndarray, trainSet: np.ndarray, pearson: bool = False
+):
     """[summary]
 
     Args:
         testSet (np.ndarray): [description]
         trainSet (np.ndarray): [description]
     """
+    if pearson:
+        test_centered_knowns, train_centered_knowns = [], []
+        for i in range(len(testSet)):
+            if not testSet[i]["centered"]:
+                # print(f"Average Rating: {testSet[i]['average_rating']}")
+                testSet[i]["known_ratings"][: testSet[i]["num_known"]] -= testSet[i][
+                    "average_rating"
+                ]
+                testSet[i]["centered"] = np.True_
+                test_centered_knowns.extend(
+                    testSet[i]["known_ratings"][: testSet[i]["num_known"]]
+                )
+        for j in range(len(trainSet)):
+            if not trainSet[j]["centered"]:
+                trainSet[j]["known_ratings"][: trainSet[j]["num_known"]] -= trainSet[j][
+                    "average_rating"
+                ]
+                trainSet[j]["centered"] = np.True_
+                train_centered_knowns.extend(
+                    trainSet[j]["known_ratings"][: trainSet[j]["num_known"]]
+                )
+        # CHECK HERE:
+        if test_centered_knowns:
+            print(
+                f"Test's Centered Known Ratings: min: {np.min(test_centered_knowns)}, max: {np.max(test_centered_knowns)}"
+            )
+        if train_centered_knowns:
+            print(
+                f"Train's Centered Known Ratings: min: {np.min(train_centered_knowns)}, max: {np.max(train_centered_knowns)}"
+            )
+
     # Go through each test user in testSet and calculate the cosine similarity of each test user with each neighboring train user
     for i in range(len(testSet)):
         # for i in range(1):  # DEBUG
@@ -489,9 +503,6 @@ def calcNeighborWeights_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarr
                 testSet[i]["predict_indices"][: testSet[i]["num_predict"]],
                 trainSet[j]["known_indices"][: trainSet[j]["num_known"]],
             )
-            # ppp.pprint(
-            #     f"Train user has {len(TrainKnowsTestPredictItemRatings)} ratings that the test user needs to predict (at indices): {TrainKnowsTestPredictItemRatings}"
-            # )
             if (
                 len(TrainKnowsTestPredictItemRatings) == 0
                 or len(sharedItemRatings) == 0
@@ -521,10 +532,23 @@ def calcNeighborWeights_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarr
                     )[0][0]
                     for itemRating in sharedItemRatings
                 ]
-                # print(f"test_shared_indices_indices: {test_shared_indices_indices}")
-                # print(f"train_shared_indices_indices: {train_shared_indices_indices}")
+                # print(
+                #     f"test {testSet[i]['user_id']} shared indices indices: {test_shared_indices_indices}"
+                # )
+                if len(test_shared_indices_indices) != len(sharedItemRatings):
+                    print(
+                        f"Error: test_shared_indices_indices: {test_shared_indices_indices} ({len(test_shared_indices_indices)}) doesn't match sharedItemRatings: {sharedItemRatings} ({len(sharedItemRatings)})"
+                    )
+                    quit()
+                if len(train_shared_indices_indices) != len(sharedItemRatings):
+                    print(
+                        f"Error: train_shared_indices_indices: {train_shared_indices_indices} ({len(train_shared_indices_indices)}) doesn't match sharedItemRatings: {sharedItemRatings} ({len(sharedItemRatings)})"
+                    )
                 sumOfProduct, sumOfSquaresU1, sumOfSquaresU2 = 0, 0, 0
                 for k in range(len(sharedItemRatings)):
+                    # print(
+                    #     f"test {testSet[i]['user_id']} train {trainSet[j]['user_id']} @ {k}-th itemRating: test rating: {testSet[i]['known_ratings'][test_shared_indices_indices[k]]} train value: {trainSet[j]['known_ratings'][train_shared_indices_indices[k]]}"
+                    # )   # DEBUG
                     sumOfProduct += (
                         testSet[i]["known_ratings"][test_shared_indices_indices[k]]
                         * trainSet[j]["known_ratings"][train_shared_indices_indices[k]]
@@ -537,41 +561,55 @@ def calcNeighborWeights_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarr
                         ** 2
                     )
                     # print(
-                    #     f"test value: {testSet[i]['known_ratings'][test_shared_indices_indices[k]]} * train value: {trainSet[j]['known_ratings'][train_shared_indices_indices[k]]} sumOfProduct: {sumOfProduct}"
-                    # )  # DEBUG # Worked
-                    # print(
-                    #     f"sumOfSquaresU1: {sumOfSquaresU1}, sumOfSquaresU2: {sumOfSquaresU2}"
-                    # )
-                cosineSimilarity = sumOfProduct / (
-                    math.sqrt(sumOfSquaresU1) * math.sqrt(sumOfSquaresU2)
-                )
-                # print(f"Cosine Similarity (Weight): {cosineSimilarity}")
+                    #     f"sumOfProduct: {sumOfProduct}, sumOfSquaresU1: {sumOfSquaresU1}, sumOfSquaresU2: {sumOfSquaresU2}"
+                    # )   # DEBUG
+                if sumOfProduct == 0:
+                    cosineSimilarity = 0
+                elif sumOfSquaresU1 == 0 or sumOfSquaresU2 == 0:
+                    cosineSimilarity = 0
+                else:
+                    cosineSimilarity = sumOfProduct / (
+                        math.sqrt(sumOfSquaresU1) * math.sqrt(sumOfSquaresU2)
+                    )
+                # if cosineSimilarity == 0:
+                #     # print(
+                #     #     f"test {testSet[i]['user_id']} train {trainSet[j]['user_id']} has cosSim Weight of {cosineSimilarity} (Pearson = {pearson})"
+                #     # )
+                #     ...
+                # else:
+                #     print(
+                #         f"test {testSet[i]['user_id']} train {trainSet[j]['user_id']} has cosSim Weight of {cosineSimilarity} (Pearson = {pearson})"
+                #     )
 
                 testSet[i]["neighbor_weights"][
                     testSet[i]["num_neighbor"]
                 ] = cosineSimilarity
-                # trainSet[j]["neighbor_weights"][
-                #     trainSet[j]["num_neighbor"]
-                # ] = cosineSimilarity
                 testSet[i]["neighbor_ids"][testSet[i]["num_neighbor"]] = trainSet[j][
                     "user_id"
                 ]
-                # trainSet[j]["neighbor_ids"][trainSet[j]["num_neighbor"]] = testSet[i][
-                #     "user_id"
-                # ]
                 trainSet[j]["num_neighbor"] += 1
                 testSet[i]["num_neighbor"] += 1
+    all_neighboring_weights = []
+    [
+        all_neighboring_weights.extend(user["neighbor_weights"][: user["num_neighbor"]])
+        for user in testSet
+    ]
+    print(
+        f"Overall Weights statistics: avg {np.mean(all_neighboring_weights)} min {np.min(all_neighboring_weights)} max {np.max(all_neighboring_weights)}"
+    )
 
 
-def calcPredictions_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarray):
+def calcPredictions(testSet: np.ndarray, trainSet: np.ndarray, pearson: bool = False):
     """[summary]
 
     Args:
         testSet (np.ndarray): [description]
         trainSet (np.ndarray): [description]
     """
+    numNoNeighborsTestSet = []
     # For each user in the testing set
     for i in range(len(testSet)):
+        numNoNeighbors = []
         # For each empty item-rating that the test user needs to predict
         for j in range(testSet[i]["num_predict"]):
             # Item that needs predicting's index:
@@ -609,27 +647,50 @@ def calcPredictions_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarray):
                             check_neighbor_has_item_rating[0]
                         ]
                     )
-                    sumRelevantWeights += testSet[i]["neighbor_weights"][k]
+                    if pearson:
+                        sumRelevantWeights += abs(testSet[i]["neighbor_weights"][k])
+                    else:
+                        sumRelevantWeights += testSet[i]["neighbor_weights"][k]
+                    # sumRelevantWeights += (
+                    #     abs(testSet[i]["neighbor_weights"][k])
+                    #     if pearson
+                    #     else testSet[i]["neighbor_weights"][k]
+                    # )
             if numRelevantNeighbors == 0:
-                print(
-                    f"WARNING: No neighbor with desired item-rating of item index {item_index} has been found for test user {testSet[i]['user_id']}!!!"
-                )
+                # print(
+                #     f"WARNING: Test user {testSet[i]['user_id']} has NO NEIGHBOR with rquired item-rating for item index {item_index}!!!"
+                # )
+                numNoNeighbors.append(item_index)
                 testSet[i]["predict_ratings"][
                     j
                 ] = 3  # Default Rating for this exact scenario
             else:
-
-                rating_prediction = (
-                    sumWeightRatingProduct / sumRelevantWeights
-                    if sumRelevantWeights != 0
-                    else 0
-                )
+                if pearson:
+                    rating_prediction = (
+                        testSet[i]["average_rating"]
+                        + (sumWeightRatingProduct / sumRelevantWeights)
+                        if sumRelevantWeights != 0
+                        and not math.isnan(sumRelevantWeights)
+                        else 0
+                    )
+                else:
+                    rating_prediction = (
+                        (sumWeightRatingProduct / sumRelevantWeights)
+                        if sumRelevantWeights != 0
+                        and not math.isnan(sumRelevantWeights)
+                        else 0
+                    )
+                # rating_prediction = (testSet[i]["average_rating"] if pearson else 0) + (
+                #     sumWeightRatingProduct / sumRelevantWeights
+                #     if sumRelevantWeights != 0
+                #     else 0
+                # )
                 rating_prediction = np.around(rating_prediction, decimals=0)
                 rating_prediction = rating_prediction.astype(int)
-                if rating_prediction > 5 or rating_prediction < 1:
-                    print(
-                        f"WARNING: Rating prediction error of {rating_prediction} at test user {testSet[i]['user_id']} item {item_index}: nominator: {sumWeightRatingProduct}, denominator: {sumRelevantWeights}"
-                    )
+                if not rating_prediction in range(1, 6):
+                    # print(
+                    #     f"WARNING: Rating prediction error of {rating_prediction} at test user {testSet[i]['user_id']} item {item_index}: avg: {testSet[i]['average_rating']} nominator: {sumWeightRatingProduct}, denominator: {sumRelevantWeights}"
+                    # )
                     if rating_prediction == 0:
                         rating_prediction = 3  # Default Rating for this above scenario
                     if rating_prediction > 5:
@@ -637,7 +698,18 @@ def calcPredictions_CosineSimilarity(testSet: np.ndarray, trainSet: np.ndarray):
                     if rating_prediction < 1:
                         rating_prediction = 1
                 testSet[i]["predict_ratings"][j] = rating_prediction
+        if len(numNoNeighbors) > 0:
+            # print(
+            #     f">>> Test user_id {testSet[i]['user_id']} ran into no neighbors {len(numNoNeighbors)} times @ {numNoNeighbors}"
+            # )
+            numNoNeighborsTestSet.append(testSet[i]["user_id"])
         testSet[i]["prediction_done"] = np.True_
+    if len(numNoNeighborsTestSet) > 0:
+        print(
+            f">>> Total number of test users with no neighbors {len(numNoNeighborsTestSet)}: {numNoNeighborsTestSet}"
+        )
+    else:
+        print(f">>> All test users have neighbors for all predict item-ratings")
 
 
 def writeOutputToFile(testSet: np.ndarray, outputFile: str):
@@ -655,32 +727,77 @@ def writeOutputToFile(testSet: np.ndarray, outputFile: str):
                 )
 
 
-# M_j (Count of number of users that have rated item j) for all 1000 items
+# M_j (Count of number of users that have rated item j) for all 1000 items for Case Modification
+def prepareItemRatingCounts(trainSet: np.ndarray):
+    ...
+
+
+def updateOutputFilenames(
+    outputFiles: list, prevSuffix: str = "", suffix: str = "", filetype: str = ".txt"
+):
+    """[summary]
+
+    Args:
+        outputFiles (list): [description]
+        prevSuffix (str, optional): [description]. Defaults to "".
+        suffix (str, optional): [description]. Defaults to "".
+        filetype (str, optional): [description]. Defaults to ".txt".
+
+    Returns:
+        [type]: [description]
+    """
+    return [
+        outFile[: -(len(prevSuffix) + len(filetype))] + suffix + filetype
+        for outFile in outputFiles
+    ]
 
 
 def main():
     """
     Driver function for Recommender System / User-based Collaborative Filtering Project.
     """
-    (datasets, out_filenames,) = recommender_import(output_suffix="v2")
-    # [test10, test20, test5, train,] = datasets
-    testSets = datasets[:3]
-    train = datasets[3]
-    [test10, test20, test5] = testSets
-    ppp.pprint(out_filenames)
-    ppp.pprint(test10[0]["known_indices"][: test10[0]["num_known"]])
-    ppp.pprint(train[0]["known_indices"][: train[0]["num_known"]])
-    print(f"total num_known for train:\t{sum(train[:]['num_known'])}")
-    print(
-        f"traing Dataset has a fill factor of {float(sum(train[:]['num_known'])) / float(len(train) * 1000)}"
-    )
-    [calcNeighborWeights_CosineSimilarity(test, train) for test in testSets]
-    [calcPredictions_CosineSimilarity(test, train) for test in testSets]
-    print(max(test10[:]["num_neighbor"]))
-    print(min(test10[:]["num_neighbor"]))
-    # ppp.pprint(test10[32]["neighbor_ids"][: test10[32]["num_neighbor"]])
-    # ppp.pprint(test10[32]["neighbor_weights"][: test10[32]["num_neighbor"]])
-    [writeOutputToFile(test, out_filenames[idx]) for idx, test in enumerate(testSets)]
+    """
+    0.  Import data from the .txt files in the same directory as this script.
+    """
+    suffices = ["v2", "Pearson", "IUF", "CaseMod", "ItemBased", "Custom"]
+    pearsons = [False, True, True, True, False, False]
+    (datasets, out_filenames,) = recommender_import(output_suffix=suffices[0])
+    trains = datasets[3]
+    tests = datasets[:3]
+    prepareItemRatingCounts(trains)
+
+    # for i in range(len(suffices)):
+    for i in range(1, 2, 1):
+        #   1.1.1   Cosine Similarity method (Naive Algorithm)
+        #   1.1.2   Pearson Correlation method (Standard Algorithm)
+        #   1.2.1   Pearson Correlation + Inverse user frequency
+        #   1.2.2   Pearson Correlation + Case Modification
+        #   2.1     Item-based Collaborative Filtering based on Adjusted Cosine Similarity
+        #   3.1     Custom Collaborative Filtering Algorithm
+        testSets = [copy.deepcopy(t) for t in tests]
+        trainSet = copy.deepcopy(trains)
+        out_filenames = updateOutputFilenames(
+            out_filenames,
+            prevSuffix=suffices[i - 1 if i != 0 else i],
+            suffix=suffices[i],
+        )
+        print(f"out_filenames: {out_filenames}")
+        [calcNeighborWeights(test, trainSet, pearsons[i]) for test in testSets]
+        if i == 1:
+            # print(testSets[0]["neighbor_weights"][: testSets[0]["num_neighbor"]])
+            allWeights = []
+            [
+                allWeights.extend(line["neighbor_weights"][: line["num_neighbor"]])
+                for line in testSets[0]
+            ]
+            print(np.min(allWeights))
+            print(np.max(allWeights))
+            # continue
+        [calcPredictions(test, trainSet, pearsons[i]) for test in testSets]
+        [
+            writeOutputToFile(test, out_filenames[idx])
+            for idx, test in enumerate(testSets)
+        ]
 
 
 if __name__ == "__main__":
