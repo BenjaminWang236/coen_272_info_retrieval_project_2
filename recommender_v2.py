@@ -443,7 +443,11 @@ def recommender_import(
 
 
 def calcNeighborWeights(
-    testSet: np.ndarray, trainSet: np.ndarray, pearson: bool = False
+    testSet: np.ndarray,
+    trainSet: np.ndarray,
+    transposed_trainSet: np.ndarray,
+    pearson: bool = False,
+    IUF=True,
 ):
     """[summary]
 
@@ -451,6 +455,29 @@ def calcNeighborWeights(
         testSet (np.ndarray): [description]
         trainSet (np.ndarray): [description]
     """
+    # Before Pearson, do IUF is specified to be true
+    # Re-calculate the test user's average rating after applying IUF
+    if IUF:
+        # Using this case's total known users in training set of 200 possible at most for each item-rating pair
+        max_users = 200
+        for test_user in testSet:
+            for known_id_id, known_index in enumerate(
+                test_user["known_indices"][: test_user["num_known"]]
+            ):
+                # To avoid dividing by zero for IUF, smooth it out by using add-one smoothing
+                # Since add-one smoothing was applied to the num_known users for that item, it must also
+                # be added to the max_users. If all num_known users are 0, then at max max_users doubles:
+                max_users = 400
+                # known_index is 1-based by the numpy array of transposed train dataset is 0-based, so subtract 1
+                IUF_value = math.log10(
+                    max_users / (transposed_trainSet[known_index - 1]["num_known"] + 1)
+                )
+                # Multiply the test user's original known rating by the IUF value
+                test_user["known_ratings"][known_id_id] *= IUF_value
+            # Re-Calculate this user's average rating:
+            test_user["average_rating"] = np.mean(
+                test_user["known_ratings"][: test_user["num_known"]]
+            ).astype(np.float64)
     if pearson:
         test_centered_knowns, train_centered_knowns = [], []
         for i in range(len(testSet)):
@@ -729,13 +756,32 @@ def writeOutputToFile(testSet: np.ndarray, outputFile: str):
 
 
 # M_j (Count of number of users that have rated item j) for all 1000 items for Case Modification
-def prepareItemRatingCounts(trainSet: np.ndarray):
-    ...
+# By transposing train dataset
+def transpose_t(trainSet: np.ndarray):
+    # Initialize test dataset
+    transposed_dataset = recommender_init(
+        dataset_size=(1000,),  # 1000 items max possible
+        user_id_offset=1,
+        num_known=0,
+        num_predict=0,
+        prediction_done=np.True_,
+    )
+    # Transpose from user-major to item-major
+    # Go through all users and add their item-ratings to item-major dataset
+    for user_id, user in enumerate(trainSet):
+        # Go through the user's known ratings
+        for item_id, item in enumerate(user["known_indices"][: user["num_known"]]):
+            transposed_dataset[item - 1]["known_indices"][
+                transposed_dataset[item - 1]["num_known"]
+            ] = user["user_id"]
+            transposed_dataset[item - 1]["known_ratings"][
+                transposed_dataset[item - 1]["num_known"]
+            ] = user["known_ratings"][item_id]
+            transposed_dataset[item - 1]["num_known"] += 1
+    return transposed_dataset
 
 
-def updateOutputFilenames(
-    outputFiles: list, prevSuffix: str = "", suffix: str = "", filetype: str = ".txt"
-):
+def updateOutputFilenames(outputFiles: list, suffix: str = "", filetype: str = ".txt"):
     """[summary]
 
     Args:
@@ -748,8 +794,7 @@ def updateOutputFilenames(
         [type]: [description]
     """
     return [
-        outFile[: -(len(prevSuffix) + len(filetype))] + suffix + filetype
-        for outFile in outputFiles
+        outFile[: -len(filetype)] + "_" + suffix + filetype for outFile in outputFiles
     ]
 
 
@@ -762,13 +807,20 @@ def main():
     """
     suffices = ["v2", "Pearson", "IUF", "CaseMod", "ItemBased", "Custom"]
     pearsons = [False, True, True, True, False, False]
-    (datasets, out_filenames,) = recommender_import(output_suffix=suffices[0])
+    IUFs = [False, False, True, False, False, False]
+    (datasets, original_out_filenames,) = recommender_import()
     trains = datasets[3]
     tests = datasets[:3]
-    prepareItemRatingCounts(trains)
+    transposed_trains = transpose_t(
+        trains
+    )  # To get the data for IUF, transpose the train dataset
+    # print(
+    #     f"Transposed num_knowns total {sum(transposed_trains[:]['num_known'])}, detail:"
+    # )  # DEBUG # Worked; Same total number of known ratings as un-transposed train dataset
+    # print(transposed_trains[:]["num_known"])
 
     # for i in range(len(suffices)):
-    for i in range(1, 2, 1):
+    for i in range(2, 3, 1):
         #   1.1.1   Cosine Similarity method (Naive Algorithm)
         #   1.1.2   Pearson Correlation method (Standard Algorithm)
         #   1.2.1   Pearson Correlation + Inverse user frequency
@@ -778,12 +830,13 @@ def main():
         testSets = [copy.deepcopy(t) for t in tests]
         trainSet = copy.deepcopy(trains)
         out_filenames = updateOutputFilenames(
-            out_filenames,
-            prevSuffix=suffices[i - 1 if i != 0 else i],
-            suffix=suffices[i],
+            original_out_filenames, suffix=suffices[i],
         )
         print(f"out_filenames: {out_filenames}")
-        [calcNeighborWeights(test, trainSet, pearsons[i]) for test in testSets]
+        [
+            calcNeighborWeights(test, trainSet, transposed_trains, pearsons[i], IUFs[i])
+            for test in testSets
+        ]
         if i == 1:
             # print(testSets[0]["neighbor_weights"][: testSets[0]["num_neighbor"]])
             allWeights = []
