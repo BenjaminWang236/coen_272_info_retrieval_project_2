@@ -897,6 +897,16 @@ def customAggregate(outTests: np.ndarray, successful_tests: np.ndarray):
                     * 0.25
                     * successful_tests[2][i][j]["predict_ratings"][k]
                 )
+                outTests[i][j]["predict_ratings"][k] = np.around(
+                    outTests[i][j]["predict_ratings"][k], decimals=0
+                )
+                outTests[i][j]["predict_ratings"][k] = outTests[i][j][
+                    "predict_ratings"
+                ][k].astype(int)
+                if outTests[i][j]["predict_ratings"][k] > 5:
+                    outTests[i][j]["predict_ratings"][k] = 5
+                if outTests[i][j]["predict_ratings"][k] < 1:
+                    outTests[i][j]["predict_ratings"][k] = 1
     return outTests
 
 
