@@ -1,5 +1,5 @@
 MY PIN: 2129090456418914
-Submissions so far: 8 (Last submission: 11/21/2021::22:28:00)
+Submissions so far: 9 (Last submission: 11/21/2021::23:55:00)
 
 Cosine Similarity:
     test5:      0.840065024384144
@@ -44,7 +44,7 @@ Item-Based CF (adjusted cosine similarity):
     OVERALL:    n/a
 
 Custom: Aggregate of Cos-Sim (0) + Pearson (1) + Case Modification (3):
-    test5:      n/a
-    test10:     n/a
-    test20:     n/a
-    OVERALL:    n/a
+    test5:      1.12467175190697
+    test10:     1.10433333333333
+    test20:     1.10128291694801
+    OVERALL:    1.10971104908882
