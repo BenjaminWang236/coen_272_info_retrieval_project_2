@@ -651,6 +651,7 @@ def calcPredictions(
     trainSet_2: np.ndarray,
     pearson: bool = False,
     IUF: bool = False,
+    caseMod: bool = False,
 ):
     """[summary]
 
@@ -693,24 +694,35 @@ def calcPredictions(
                     #     ],
                     #     end=" ",
                     # )
+                    caseMod_factor = 1
+                    if caseMod:
+                        caseMod_factor = abs(testSet[i]["neighbor_weights"][k]) ** (
+                            2.5 - 1
+                        )  # p of 2.5
                     if IUF:
                         sumWeightRatingProduct += (
-                            testSet[i]["neighbor_weights"][k]
+                            caseMod_factor
+                            * testSet[i]["neighbor_weights"][k]
                             * trainSet_2[neighbor_id - 1]["known_ratings"][
                                 check_neighbor_has_item_rating[0]
                             ]  # Original TrainSet no multiplied by IUF
                         )
                     else:
                         sumWeightRatingProduct += (
-                            testSet[i]["neighbor_weights"][k]
+                            caseMod_factor
+                            * testSet[i]["neighbor_weights"][k]
                             * trainSet[neighbor_id - 1]["known_ratings"][
                                 check_neighbor_has_item_rating[0]
                             ]
                         )
                     if pearson:
-                        sumRelevantWeights += abs(testSet[i]["neighbor_weights"][k])
+                        sumRelevantWeights += abs(
+                            caseMod_factor * testSet[i]["neighbor_weights"][k]
+                        )
                     else:
-                        sumRelevantWeights += testSet[i]["neighbor_weights"][k]
+                        sumRelevantWeights += (
+                            caseMod_factor * testSet[i]["neighbor_weights"][k]
+                        )
                     # sumRelevantWeights += (
                     #     abs(testSet[i]["neighbor_weights"][k])
                     #     if pearson
@@ -849,6 +861,7 @@ def main():
     suffices = ["v2", "Pearson", "IUF", "CaseMod", "ItemBased", "Custom"]
     pearsons = [False, True, True, True, False, False]
     IUFs = [False, False, True, False, False, False]
+    caseMods = [False, False, False, True, False, False]
     (datasets, original_out_filenames,) = recommender_import()
     trains = datasets[3]
     tests = datasets[:3]
@@ -861,7 +874,7 @@ def main():
     # print(transposed_trains[:]["num_known"])
 
     # for i in range(len(suffices)):
-    for i in range(2, 3, 1):
+    for i in range(3, 4, 1):
         #   1.1.1   Cosine Similarity method (Naive Algorithm)
         #   1.1.2   Pearson Correlation method (Standard Algorithm)
         #   1.2.1   Pearson Correlation + Inverse user frequency
@@ -892,7 +905,13 @@ def main():
             # continue
         [
             calcPredictions(
-                test, trainSet, testSets_2[test_id], trainSet_2, pearsons[i], IUFs[i]
+                test,
+                trainSet,
+                testSets_2[test_id],
+                trainSet_2,
+                pearsons[i],
+                IUFs[i],
+                caseMods[i],
             )
             for test_id, test in enumerate(testSets)
         ]
