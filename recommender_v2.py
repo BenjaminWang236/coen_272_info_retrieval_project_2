@@ -464,19 +464,37 @@ def calcNeighborWeights(
             for known_id_id, known_index in enumerate(
                 test_user["known_indices"][: test_user["num_known"]]
             ):
-                # To avoid dividing by zero for IUF, smooth it out by using add-one smoothing
-                # Since add-one smoothing was applied to the num_known users for that item, it must also
-                # be added to the max_users. If all num_known users are 0, then at max max_users doubles:
-                max_users = 400
-                # known_index is 1-based by the numpy array of transposed train dataset is 0-based, so subtract 1
-                IUF_value = math.log10(
-                    max_users / (transposed_trainSet[known_index - 1]["num_known"] + 1)
-                )
+                if transposed_trainSet[known_index - 1]["num_known"] == 0:
+                    IUF_value = 1
+                else:
+                    # known_index is 1-based by the numpy array of transposed train dataset is 0-based, so subtract 1
+                    IUF_value = math.log(
+                        max_users / (transposed_trainSet[known_index - 1]["num_known"]),
+                        max_users,
+                    )
                 # Multiply the test user's original known rating by the IUF value
                 test_user["known_ratings"][known_id_id] *= IUF_value
             # Re-Calculate this user's average rating:
             test_user["average_rating"] = np.mean(
                 test_user["known_ratings"][: test_user["num_known"]]
+            ).astype(np.float64)
+        for train_user in trainSet:
+            for known_id_id, known_index in enumerate(
+                train_user["known_indices"][: train_user["num_known"]]
+            ):
+                if transposed_trainSet[known_index - 1]["num_known"] == 0:
+                    IUF_value = 1
+                else:
+                    # known_index is 1-based by the numpy array of transposed train dataset is 0-based, so subtract 1
+                    IUF_value = math.log(
+                        max_users / (transposed_trainSet[known_index - 1]["num_known"]),
+                        max_users,
+                    )
+                # Multiply the test user's original known rating by the IUF value
+                train_user["known_ratings"][known_id_id] *= IUF_value
+            # Re-Calculate this user's average rating:
+            train_user["average_rating"] = np.mean(
+                train_user["known_ratings"][: train_user["num_known"]]
             ).astype(np.float64)
     if pearson:
         test_centered_knowns, train_centered_knowns = [], []
@@ -626,7 +644,14 @@ def calcNeighborWeights(
     )
 
 
-def calcPredictions(testSet: np.ndarray, trainSet: np.ndarray, pearson: bool = False):
+def calcPredictions(
+    testSet: np.ndarray,
+    trainSet: np.ndarray,
+    testSet_2: np.ndarray,
+    trainSet_2: np.ndarray,
+    pearson: bool = False,
+    IUF: bool = False,
+):
     """[summary]
 
     Args:
@@ -668,12 +693,20 @@ def calcPredictions(testSet: np.ndarray, trainSet: np.ndarray, pearson: bool = F
                     #     ],
                     #     end=" ",
                     # )
-                    sumWeightRatingProduct += (
-                        testSet[i]["neighbor_weights"][k]
-                        * trainSet[neighbor_id - 1]["known_ratings"][
-                            check_neighbor_has_item_rating[0]
-                        ]
-                    )
+                    if IUF:
+                        sumWeightRatingProduct += (
+                            testSet[i]["neighbor_weights"][k]
+                            * trainSet_2[neighbor_id - 1]["known_ratings"][
+                                check_neighbor_has_item_rating[0]
+                            ]  # Original TrainSet no multiplied by IUF
+                        )
+                    else:
+                        sumWeightRatingProduct += (
+                            testSet[i]["neighbor_weights"][k]
+                            * trainSet[neighbor_id - 1]["known_ratings"][
+                                check_neighbor_has_item_rating[0]
+                            ]
+                        )
                     if pearson:
                         sumRelevantWeights += abs(testSet[i]["neighbor_weights"][k])
                     else:
@@ -688,19 +721,27 @@ def calcPredictions(testSet: np.ndarray, trainSet: np.ndarray, pearson: bool = F
                 #     f"WARNING: Test user {testSet[i]['user_id']} has NO NEIGHBOR with rquired item-rating for item index {item_index}!!!"
                 # )
                 numNoNeighbors.append(item_index)
-                if pearson:
-                    rating_prediction = testSet[i]["average_rating"]
-                else:
-                    rating_prediction = 3  # Default Rating for this exact scenario
+                rating_prediction = (
+                    testSet[i]["average_rating"]
+                    if not IUF
+                    else testSet_2[i]["average_rating"]
+                )
+
             else:
                 if pearson:
-                    rating_prediction = (
-                        testSet[i]["average_rating"]
-                        + (sumWeightRatingProduct / sumRelevantWeights)
+                    if IUF:
+                        rating_prediction = testSet_2[i][
+                            "average_rating"
+                        ]  # Original Rating
+                    else:
+                        rating_prediction = testSet[i]["average_rating"]
+                    rating_prediction += (
+                        (sumWeightRatingProduct / sumRelevantWeights)
                         if sumRelevantWeights != 0
                         and not math.isnan(sumRelevantWeights)
                         else 0
                     )
+
                 else:
                     rating_prediction = (
                         (sumWeightRatingProduct / sumRelevantWeights)
@@ -828,7 +869,9 @@ def main():
         #   2.1     Item-based Collaborative Filtering based on Adjusted Cosine Similarity
         #   3.1     Custom Collaborative Filtering Algorithm
         testSets = [copy.deepcopy(t) for t in tests]
+        testSets_2 = [copy.deepcopy(t) for t in tests]
         trainSet = copy.deepcopy(trains)
+        trainSet_2 = copy.deepcopy(trains)
         out_filenames = updateOutputFilenames(
             original_out_filenames, suffix=suffices[i],
         )
@@ -847,7 +890,12 @@ def main():
             print(np.min(allWeights))
             print(np.max(allWeights))
             # continue
-        [calcPredictions(test, trainSet, pearsons[i]) for test in testSets]
+        [
+            calcPredictions(
+                test, trainSet, testSets_2[test_id], trainSet_2, pearsons[i], IUFs[i]
+            )
+            for test_id, test in enumerate(testSets)
+        ]
         [
             writeOutputToFile(test, out_filenames[idx])
             for idx, test in enumerate(testSets)
