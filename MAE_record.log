@@ -1,5 +1,5 @@
 MY PIN: 2129090456418914
-Submissions so far: 7 (Last submission: 11/21/2021::21:01:00)
+Submissions so far: 8 (Last submission: 11/21/2021::22:28:00)
 
 Cosine Similarity:
     test5:      0.840065024384144
@@ -32,7 +32,13 @@ IUF:
     OVERALL:    1.30557379740601
 
 Case Modification:
-    test5:      1.23346254845567
-    test10:     1.31816666666667
-    test20:     1.35391144979261
-    OVERALL:    1.30557379740601
+    test5:      0.880705264474178
+    test10:     0.831833333333333
+    test20:     0.806597858589756
+    OVERALL:    0.837136759152848
+
+Item-Based CF (adjusted cosine similarity):
+    test5:      0.880705264474178
+    test10:     0.831833333333333
+    test20:     0.806597858589756
+    OVERALL:    0.837136759152848
