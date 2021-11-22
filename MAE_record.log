@@ -1,5 +1,5 @@
 MY PIN: 2129090456418914
-Submissions so far: 5 (Last submission: 11/21/2021::21:01:00)
+Submissions so far: 7 (Last submission: 11/21/2021::21:01:00)
 
 Cosine Similarity:
     test5:      0.840065024384144
@@ -26,7 +26,13 @@ Pearson Correlation (Corrected):
     OVERALL:    0.818543753078312
 
 IUF:
-    test5:      0.87757909215956
-    test10:     0.816333333333333
-    test20:     0.774283785087296
-    OVERALL:    0.818543753078312
+    test5:      1.23346254845567
+    test10:     1.31816666666667
+    test20:     1.35391144979261
+    OVERALL:    1.30557379740601
+
+Case Modification:
+    test5:      1.23346254845567
+    test10:     1.31816666666667
+    test20:     1.35391144979261
+    OVERALL:    1.30557379740601
