@@ -38,7 +38,13 @@ Case Modification:
     OVERALL:    0.837136759152848
 
 Item-Based CF (adjusted cosine similarity):
-    test5:      0.880705264474178
-    test10:     0.831833333333333
-    test20:     0.806597858589756
-    OVERALL:    0.837136759152848
+    test5:      n/a
+    test10:     n/a
+    test20:     n/a
+    OVERALL:    n/a
+
+Custom: Aggregate of Cos-Sim (0) + Pearson (1) + Case Modification (3):
+    test5:      n/a
+    test10:     n/a
+    test20:     n/a
+    OVERALL:    n/a

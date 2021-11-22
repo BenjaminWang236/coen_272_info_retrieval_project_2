@@ -445,9 +445,11 @@ def recommender_import(
 def calcNeighborWeights(
     testSet: np.ndarray,
     trainSet: np.ndarray,
+    transposed_testSet: np.ndarray,
     transposed_trainSet: np.ndarray,
     pearson: bool = False,
-    IUF=True,
+    IUF: bool = False,
+    adjustedCosSim: bool = False,
 ):
     """[summary]
 
@@ -455,6 +457,31 @@ def calcNeighborWeights(
         testSet (np.ndarray): [description]
         trainSet (np.ndarray): [description]
     """
+    # If adjustedCosSim, then no Pearson & no IUF, and it means this is Item-Based!!!
+    if adjustedCosSim:
+        for item in testSet:
+            for known_id, known_user in enumerate(
+                item["known_ratings"][: item["num_known"]]
+            ):
+                # print(
+                #     f"test: {item['known_indices'][known_id] - transposed_testSet[0]['user_id']}"
+                # )
+                known_user -= transposed_testSet[
+                    item["known_indices"][known_id]
+                    - transposed_testSet[0]["user_id"]
+                    - 1
+                ]["average_rating"]
+        for item in trainSet:
+            for known_id, known_user in enumerate(
+                item["known_ratings"][: item["num_known"]]
+            ):
+                # print(f"train: {item['known_indices'][known_id]- transposed_trainSet[0]['user_id']}")
+                known_user -= transposed_trainSet[
+                    item["known_indices"][known_id]
+                    - transposed_trainSet[0]["user_id"]
+                    - 1
+                ]["average_rating"]
+
     # Before Pearson, do IUF is specified to be true
     # Re-calculate the test user's average rating after applying IUF
     if IUF:
@@ -639,9 +666,12 @@ def calcNeighborWeights(
         all_neighboring_weights.extend(user["neighbor_weights"][: user["num_neighbor"]])
         for user in testSet
     ]
-    print(
-        f"Overall Weights statistics: avg {np.mean(all_neighboring_weights)} min {np.min(all_neighboring_weights)} max {np.max(all_neighboring_weights)}"
-    )
+    if all_neighboring_weights:
+        print(
+            f"Overall Weights statistics: avg {np.mean(all_neighboring_weights)} min {np.min(all_neighboring_weights)} max {np.max(all_neighboring_weights)}"
+        )
+    else:
+        print("all_neighboring_weights is empty.")
 
 
 def calcPredictions(
@@ -810,18 +840,18 @@ def writeOutputToFile(testSet: np.ndarray, outputFile: str):
 
 # M_j (Count of number of users that have rated item j) for all 1000 items for Case Modification
 # By transposing train dataset
-def transpose_t(trainSet: np.ndarray):
+def transpose_t(originalSet: np.ndarray, max_size: int, offset: int = 1):
     # Initialize test dataset
     transposed_dataset = recommender_init(
-        dataset_size=(1000,),  # 1000 items max possible
-        user_id_offset=1,
+        dataset_size=(max_size,),  # 1000 items max possible
+        user_id_offset=offset,
         num_known=0,
         num_predict=0,
         prediction_done=np.True_,
     )
     # Transpose from user-major to item-major
     # Go through all users and add their item-ratings to item-major dataset
-    for user_id, user in enumerate(trainSet):
+    for user_id, user in enumerate(originalSet):
         # Go through the user's known ratings
         for item_id, item in enumerate(user["known_indices"][: user["num_known"]]):
             transposed_dataset[item - 1]["known_indices"][
@@ -831,6 +861,10 @@ def transpose_t(trainSet: np.ndarray):
                 transposed_dataset[item - 1]["num_known"]
             ] = user["known_ratings"][item_id]
             transposed_dataset[item - 1]["num_known"] += 1
+    for item in transposed_dataset:
+        item["average_rating"] = np.mean(
+            item["known_ratings"][: item["num_known"]]
+        ).astype(np.float64)
     return transposed_dataset
 
 
@@ -851,6 +885,21 @@ def updateOutputFilenames(outputFiles: list, suffix: str = "", filetype: str = "
     ]
 
 
+def customAggregate(outTests: np.ndarray, successful_tests: np.ndarray):
+    for i in range(len(outTests)):
+        for j in range(len(outTests[i])):
+            for k in range(outTests[i][j]["num_predict"]):
+                # predict_ratings
+                outTests[i][j]["predict_ratings"][k] = (
+                    0.5 * successful_tests[0][i][j]["predict_ratings"][k]
+                    + 0.25
+                    * successful_tests[1][i][j]["predict_ratings"][k]
+                    * 0.25
+                    * successful_tests[2][i][j]["predict_ratings"][k]
+                )
+    return outTests
+
+
 def main():
     """
     Driver function for Recommender System / User-based Collaborative Filtering Project.
@@ -862,19 +911,28 @@ def main():
     pearsons = [False, True, True, True, False, False]
     IUFs = [False, False, True, False, False, False]
     caseMods = [False, False, False, True, False, False]
+    itemBased = [False, False, False, False, True, False]
+    adjustedCosSim = [False, False, False, False, True, False]
+    successful_runs = [0, 1, 3]
+    failed_runs = [2, 4]
     (datasets, original_out_filenames,) = recommender_import()
     trains = datasets[3]
     tests = datasets[:3]
+    # For both transposes, the item-major datasets have max possible of 1000 items
     transposed_trains = transpose_t(
-        trains
+        trains, max_size=1000, offset=1
     )  # To get the data for IUF, transpose the train dataset
+    transposed_tests = [transpose_t(t, max_size=1000, offset=1) for t in tests]
     # print(
-    #     f"Transposed num_knowns total {sum(transposed_trains[:]['num_known'])}, detail:"
+    #     f"Transposed num_known total {sum(transposed_trains[:]['num_known'])}, detail:"
     # )  # DEBUG # Worked; Same total number of known ratings as un-transposed train dataset
     # print(transposed_trains[:]["num_known"])
-
-    # for i in range(len(suffices)):
-    for i in range(3, 4, 1):
+    successful_run_tests = []
+    for i in range(len(suffices)):
+        # Item Based failed, SKIP for computing Custom (5)
+        if i in failed_runs:
+            continue
+        # for i in range(4, 5, 1):
         #   1.1.1   Cosine Similarity method (Naive Algorithm)
         #   1.1.2   Pearson Correlation method (Standard Algorithm)
         #   1.2.1   Pearson Correlation + Inverse user frequency
@@ -885,40 +943,85 @@ def main():
         testSets_2 = [copy.deepcopy(t) for t in tests]
         trainSet = copy.deepcopy(trains)
         trainSet_2 = copy.deepcopy(trains)
+        transposed_train = copy.deepcopy(transposed_trains)
+        transposed_testSets = [copy.deepcopy(t) for t in transposed_tests]
         out_filenames = updateOutputFilenames(
             original_out_filenames, suffix=suffices[i],
         )
         print(f"out_filenames: {out_filenames}")
-        [
-            calcNeighborWeights(test, trainSet, transposed_trains, pearsons[i], IUFs[i])
-            for test in testSets
-        ]
-        if i == 1:
-            # print(testSets[0]["neighbor_weights"][: testSets[0]["num_neighbor"]])
-            allWeights = []
+        if i == 5:  # Custom
+            # Get the custom dataset
+            testSets = [copy.deepcopy(t) for t in tests]
+            # Aggregate rating is 50% Cos-Sim (Best MAE) + 25% Pearson Correlation (2nd Worst MAE) + 25% Case Modification (Worst MAE)
+            customAggregate(testSets, successful_run_tests)
             [
-                allWeights.extend(line["neighbor_weights"][: line["num_neighbor"]])
-                for line in testSets[0]
+                writeOutputToFile(test, out_filenames[idx])
+                for idx, test in enumerate(testSets)
             ]
-            print(np.min(allWeights))
-            print(np.max(allWeights))
-            # continue
-        [
-            calcPredictions(
-                test,
-                trainSet,
-                testSets_2[test_id],
-                trainSet_2,
-                pearsons[i],
-                IUFs[i],
-                caseMods[i],
-            )
-            for test_id, test in enumerate(testSets)
-        ]
-        [
-            writeOutputToFile(test, out_filenames[idx])
-            for idx, test in enumerate(testSets)
-        ]
+            continue
+        if not itemBased[i]:
+            [
+                calcNeighborWeights(
+                    test,
+                    trainSet,
+                    transposed_testSets[test_id],
+                    transposed_train,
+                    pearsons[i],
+                    IUFs[i],
+                )
+                for test_id, test in enumerate(testSets)
+            ]
+            [
+                calcPredictions(
+                    test,
+                    trainSet,
+                    testSets_2[test_id],
+                    trainSet_2,
+                    pearsons[i],
+                    IUFs[i],
+                    caseMods[i],
+                )
+                for test_id, test in enumerate(testSets)
+            ]
+            [
+                writeOutputToFile(test, out_filenames[idx])
+                for idx, test in enumerate(testSets)
+            ]
+            if i in successful_runs:
+                successful_run_tests.append(testSets)
+        else:  # if item-based:
+            [
+                calcNeighborWeights(
+                    test,
+                    transposed_train,
+                    testSets[test_id],
+                    trainSet,
+                    pearsons[i],
+                    IUFs[i],
+                    adjustedCosSim[i],
+                )
+                for test_id, test in enumerate(transposed_testSets)
+            ]
+            [
+                calcPredictions(
+                    test,
+                    transposed_train,
+                    testSets[test_id],
+                    trainSet,
+                    pearsons[i],
+                    IUFs[i],
+                    caseMods[i],
+                )
+                for test_id, test in enumerate(transposed_testSets)
+            ]
+            [print(t) for t in transposed_testSets]  # DEBUG # FAILED, OUT OF TIME
+            # Transpose back to user-major order    #TBD
+            [
+                writeOutputToFile(test, out_filenames[idx])
+                for idx, test in enumerate(transposed_testSets)
+            ]
+            if i in successful_runs:
+                successful_run_tests.append(transposed_testSets)
 
 
 if __name__ == "__main__":

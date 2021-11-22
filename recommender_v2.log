@@ -2,6 +2,24 @@ file 'test10.txt' total num_known: 1000 + total num_predict: 6000 = 7000 == numb
 file 'test20.txt' total num_known: 2000 + total num_predict: 10367 = 12367 == number of lines in file: 12367
 file 'test5.txt' total num_known: 500 + total num_predict: 7997 = 8497 == number of lines in file: 8497
 file 'train.txt' total num_known: 16001 + total num_predict: 183999 = 200000 == number of values in file: 200000
+out_filenames: ['result10_v2.txt', 'result20_v2.txt', 'result5_v2.txt']
+Overall Weights statistics: avg 0.9702836275100708 min 0.47058823704719543 max 1.0
+Overall Weights statistics: avg 0.9639632701873779 min 0.38461539149284363 max 1.0
+Overall Weights statistics: avg 0.9809784293174744 min 0.38461539149284363 max 1.0
+>>> Total number of test users with no neighbors 5: [333, 344, 366, 371, 376]
+>>> Total number of test users with no neighbors 6: [401, 441, 452, 479, 482, 483]
+>>> Total number of test users with no neighbors 10: [205, 209, 216, 218, 229, 237, 250, 266, 272, 286]
+out_filenames: ['result10_Pearson.txt', 'result20_Pearson.txt', 'result5_Pearson.txt']
+Test's Centered Known Ratings: min: -3.5, max: 2.0
+Train's Centered Known Ratings: min: -3.6935482025146484, max: 3.301255226135254
+Overall Weights statistics: avg 0.11452317982912064 min -1.0 max 1.0
+Test's Centered Known Ratings: min: -3.4000000953674316, max: 2.799999952316284
+Overall Weights statistics: avg 0.11821741610765457 min -1.0 max 1.0
+Test's Centered Known Ratings: min: -2.799999952316284, max: 2.799999952316284
+Overall Weights statistics: avg 0.14541642367839813 min -1.0 max 1.0
+>>> Total number of test users with no neighbors 5: [333, 344, 366, 371, 376]
+>>> Total number of test users with no neighbors 6: [401, 441, 452, 479, 482, 483]
+>>> Total number of test users with no neighbors 10: [205, 209, 216, 218, 229, 237, 250, 266, 272, 286]
 out_filenames: ['result10_CaseMod.txt', 'result20_CaseMod.txt', 'result5_CaseMod.txt']
 Test's Centered Known Ratings: min: -3.5, max: 2.0
 Train's Centered Known Ratings: min: -3.6935482025146484, max: 3.301255226135254
@@ -13,3 +31,4 @@ Overall Weights statistics: avg 0.14541642367839813 min -1.0 max 1.0
 >>> Total number of test users with no neighbors 5: [333, 344, 366, 371, 376]
 >>> Total number of test users with no neighbors 6: [401, 441, 452, 479, 482, 483]
 >>> Total number of test users with no neighbors 10: [205, 209, 216, 218, 229, 237, 250, 266, 272, 286]
+out_filenames: ['result10_Custom.txt', 'result20_Custom.txt', 'result5_Custom.txt']
