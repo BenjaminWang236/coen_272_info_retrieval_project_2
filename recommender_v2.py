@@ -661,9 +661,10 @@ def calcPredictions(testSet: np.ndarray, trainSet: np.ndarray, pearson: bool = F
                 #     f"WARNING: Test user {testSet[i]['user_id']} has NO NEIGHBOR with rquired item-rating for item index {item_index}!!!"
                 # )
                 numNoNeighbors.append(item_index)
-                testSet[i]["predict_ratings"][
-                    j
-                ] = 3  # Default Rating for this exact scenario
+                if pearson:
+                    rating_prediction = testSet[i]["average_rating"]
+                else:
+                    rating_prediction = 3  # Default Rating for this exact scenario
             else:
                 if pearson:
                     rating_prediction = (
@@ -680,24 +681,24 @@ def calcPredictions(testSet: np.ndarray, trainSet: np.ndarray, pearson: bool = F
                         and not math.isnan(sumRelevantWeights)
                         else 0
                     )
-                # rating_prediction = (testSet[i]["average_rating"] if pearson else 0) + (
-                #     sumWeightRatingProduct / sumRelevantWeights
-                #     if sumRelevantWeights != 0
-                #     else 0
+            # rating_prediction = (testSet[i]["average_rating"] if pearson else 0) + (
+            #     sumWeightRatingProduct / sumRelevantWeights
+            #     if sumRelevantWeights != 0
+            #     else 0
+            # )
+            rating_prediction = np.around(rating_prediction, decimals=0)
+            rating_prediction = rating_prediction.astype(int)
+            if not rating_prediction in range(1, 6):
+                # print(
+                #     f"WARNING: Rating prediction error of {rating_prediction} at test user {testSet[i]['user_id']} item {item_index}: avg: {testSet[i]['average_rating']} nominator: {sumWeightRatingProduct}, denominator: {sumRelevantWeights}"
                 # )
-                rating_prediction = np.around(rating_prediction, decimals=0)
-                rating_prediction = rating_prediction.astype(int)
-                if not rating_prediction in range(1, 6):
-                    # print(
-                    #     f"WARNING: Rating prediction error of {rating_prediction} at test user {testSet[i]['user_id']} item {item_index}: avg: {testSet[i]['average_rating']} nominator: {sumWeightRatingProduct}, denominator: {sumRelevantWeights}"
-                    # )
-                    if rating_prediction == 0:
-                        rating_prediction = 3  # Default Rating for this above scenario
-                    if rating_prediction > 5:
-                        rating_prediction = 5
-                    if rating_prediction < 1:
-                        rating_prediction = 1
-                testSet[i]["predict_ratings"][j] = rating_prediction
+                if rating_prediction == 0:
+                    rating_prediction = 3  # Default Rating for this above scenario
+                if rating_prediction > 5:
+                    rating_prediction = 5
+                if rating_prediction < 1:
+                    rating_prediction = 1
+            testSet[i]["predict_ratings"][j] = rating_prediction
         if len(numNoNeighbors) > 0:
             # print(
             #     f">>> Test user_id {testSet[i]['user_id']} ran into no neighbors {len(numNoNeighbors)} times @ {numNoNeighbors}"
